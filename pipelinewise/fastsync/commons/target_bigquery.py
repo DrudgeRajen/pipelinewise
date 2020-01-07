@@ -87,7 +87,7 @@ class FastSyncTargetBigquery:
         target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
 
         # skip the EXTRACTED, BATCHED and DELETED columns in case they exist because they gonna be added later
-        columns = [c.replace('current', '_current') for c in columns if not (c.startswith(self.EXTRACTED_AT_COLUMN) or
+        columns = [c.replace('current', '`current`') for c in columns if not (c.startswith(self.EXTRACTED_AT_COLUMN) or
                                               c.startswith(self.BATCHED_AT_COLUMN) or
                                               c.startswith(self.DELETED_AT_COLUMN))]
 
@@ -112,7 +112,7 @@ class FastSyncTargetBigquery:
         table_ref = dataset_ref.table(target_table)
         table_schema = client.get_table(table_ref).schema
         job_config = bigquery.LoadJobConfig()
-        job_config.source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
+        job_config.source_format = bigquery.SourceFormat.CSV
         job_config.schema = table_schema
         job_config.write_disposition = 'WRITE_TRUNCATE'
         with open(file_name, "rb") as source_file:
@@ -198,12 +198,11 @@ class FastSyncTargetBigquery:
 
         # we cant swap tables in bigquery, so we copy the temp into the table
         # then delete the temp table
-        job_config = bigquery.LoadJobConfig()
+        job_config = bigquery.CopyJobConfig()
         job_config.write_disposition = 'WRITE_TRUNCATE'
         client = self.open_connection()
         replace_job = client.copy_table(temp_table_id, table_id, job_config=job_config)
         replace_job.result()
 
         # delete the temp table
-        delete_job = client.delete_table(temp_table_id)
-        delete_job.result()
+        client.delete_table(temp_table_id)

@@ -82,7 +82,7 @@ def sync_table(table):
         bookmark = utils.get_bookmark_for_table(table, args.properties, postgres, dbname=dbname)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
-        postgres.copy_table(table, filepath, table_format='json')
+        postgres.copy_table(table, filepath)
         bigquery_types = postgres.map_column_types_to_target(table)
         bigquery_columns = bigquery_types.get("columns", [])
         postgres.close_connection()
@@ -115,7 +115,7 @@ def sync_table(table):
         utils.grant_privilege(target_schema, grantees, bigquery.grant_usage_on_schema)
         utils.grant_privilege(target_schema, grantees, bigquery.grant_select_on_schema)
 
-    except Exception as exc:
+    except KeyError as exc:
         utils.log("CRITICAL: {}".format(exc))
         return "{}: {}".format(table, exc)
 
