@@ -28,6 +28,7 @@ setup(name='pipelinewise',
         'PyMySQL==0.7.11',
         'psycopg2==2.8.2',
         'snowflake-connector-python==2.0.3',
+        'google-cloud-bigquery==1.23.0',
         'singer-python==5.9.*',
         'singer-encodings==0.0.*',
         'python-dateutil<2.8.1',
@@ -51,6 +52,7 @@ setup(name='pipelinewise',
         postgres-to-snowflake=pipelinewise.fastsync.postgres_to_snowflake:main
         mysql-to-redshift=pipelinewise.fastsync.mysql_to_redshift:main
         postgres-to-redshift=pipelinewise.fastsync.postgres_to_redshift:main
+        postgres-to-bigquery=pipelinewise.fastsync.postgres_to_bigquery:main
         s3-csv-to-snowflake=pipelinewise.fastsync.s3_csv_to_snowflake:main
     ''',
     packages=find_packages(exclude=['tests*']),

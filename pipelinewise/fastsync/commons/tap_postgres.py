@@ -218,7 +218,7 @@ class FastSyncTapPostgres:
         }
 
 
-    def copy_table(self, table_name, path):
+    def copy_table(self, table_name, path, table_format='csv'):
         table_columns = self.get_table_columns(table_name)
         column_safe_sql_values = [c.get('safe_sql_value') for c in table_columns]
 
@@ -226,12 +226,20 @@ class FastSyncTapPostgres:
         if len(column_safe_sql_values) == 0:
             raise Exception("{} table not found.".format(table_name))
 
-        sql = """COPY (SELECT {}
-        ,now() AT TIME ZONE 'UTC'
-        ,now() AT TIME ZONE 'UTC'
-        ,null
-        FROM {}) TO STDOUT with CSV DELIMITER ','
-        """.format(','.join(column_safe_sql_values), table_name)
+        if table_format == 'csv':
+            sql = """COPY (SELECT {}
+            ,now() AT TIME ZONE 'UTC'
+            ,now() AT TIME ZONE 'UTC'
+            ,null
+            FROM {}) TO STDOUT with CSV DELIMITER ','
+            """.format(','.join(column_safe_sql_values), table_name)
+        elif table_format == 'json':
+            sql = """COPY (SELECT row_to_json(r) FROM (SELECT {}
+            ,now() AT TIME ZONE 'UTC' AS _sdc_extracted_at
+            ,now() AT TIME ZONE 'UTC' AS _sdc_batched_at
+            ,null AS _sdc_deleted_at
+            FROM {}) r ) TO STDOUT
+            """.format(','.join(column_safe_sql_values), table_name)
         utils.log("POSTGRES - Exporting data: {}".format(sql))
         with gzip.open(path, 'wt') as gzfile:
             self.curr.copy_expert(sql, gzfile, size=131072)

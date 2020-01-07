@@ -61,7 +61,7 @@ def tap_type_to_target_type(pg_type):
         'ARRAY':'VARIANT',  # This is all uppercase, because postgres stores it in this format in information_schema.columns.data_type
         'json':'VARIANT',
         'jsonb':'VARIANT'
-    }.get(pg_type, 'VARCHAR')
+    }.get(pg_type, 'STRING')
 
 
 def sync_table(table):
@@ -82,7 +82,7 @@ def sync_table(table):
         bookmark = utils.get_bookmark_for_table(table, args.properties, postgres, dbname=dbname)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
-        postgres.copy_table(table, filepath)
+        postgres.copy_table(table, filepath, table_format='json')
         bigquery_types = postgres.map_column_types_to_target(table)
         bigquery_columns = bigquery_types.get("columns", [])
         postgres.close_connection()
@@ -92,7 +92,7 @@ def sync_table(table):
         bigquery.create_table(target_schema, table, bigquery_columns, is_temporary=True)
 
         # Load into Bigquery table
-        bigquery.copy_to_table(file_name, target_schema, table, is_temporary=True)
+        bigquery.copy_to_table(filepath, target_schema, table, is_temporary=True)
         os.remove(filepath)
 
         # Obfuscate columns

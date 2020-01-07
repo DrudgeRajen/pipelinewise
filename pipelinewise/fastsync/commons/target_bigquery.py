@@ -12,7 +12,7 @@ import os
 
 from . import utils
 
-class FastSyncTargetSnowflake:
+class FastSyncTargetBigquery:
     EXTRACTED_AT_COLUMN = '_sdc_extracted_at'
     BATCHED_AT_COLUMN = '_sdc_batched_at'
     DELETED_AT_COLUMN = '_sdc_deleted_at'
@@ -51,7 +51,7 @@ class FastSyncTargetSnowflake:
             queries = [query]
 
         client = self.open_connection()
-        logger.info("TARGET_BIGQUERY - Running query: {}".format(query))
+        utils.log("TARGET_BIGQUERY - Running query: {}".format(query))
         query_job = client.query(';\n'.join(queries), job_config=job_config)
         query_job.result()
 
@@ -59,17 +59,17 @@ class FastSyncTargetSnowflake:
 
 
     def create_schema(self, schema_name):
-        temp_schema = self.connection_config.get('temp_schema', self.schema_name)
+        temp_schema = self.connection_config.get('temp_schema', schema_name)
         schema_rows = 0
 
         for schema in set([schema_name, temp_schema]):
-                schema_rows = self.query(
-                    'SELECT LOWER(schema_name) schema_name FROM INFORMATION_SCHEMA.SCHEMATA WHERE LOWER(schema_name) = ?',
-                    (schema.lower(),)
-                )
+            schema_rows = self.query(
+                'SELECT LOWER(schema_name) schema_name FROM INFORMATION_SCHEMA.SCHEMATA WHERE LOWER(schema_name) = ?',
+                (schema.lower(),)
+            )
 
             if schema_rows.result().total_rows == 0:
-                logger.info("Schema '{}' does not exist. Creating...".format(schema))
+                utils.log("Schema '{}' does not exist. Creating...".format(schema))
                 client = self.open_connection()
                 dataset = client.create_dataset(schema)
 
@@ -80,20 +80,20 @@ class FastSyncTargetSnowflake:
         sql = "DROP TABLE IF EXISTS {}.{}".format(target_schema, target_table)
         self.query(sql)
 
-    def create_table(self, target_schema: str, table_name: str, columns: List[str], primary_key: str,
+    def create_table(self, target_schema: str, table_name: str, columns: List[str],
                      is_temporary: bool = False, sort_columns = False):
 
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
 
         # skip the EXTRACTED, BATCHED and DELETED columns in case they exist because they gonna be added later
-        columns = [c for c in columns if not (c.startswith(self.EXTRACTED_AT_COLUMN) or
+        columns = [c.replace('current', '_current') for c in columns if not (c.startswith(self.EXTRACTED_AT_COLUMN) or
                                               c.startswith(self.BATCHED_AT_COLUMN) or
                                               c.startswith(self.DELETED_AT_COLUMN))]
 
         columns += [f'{self.EXTRACTED_AT_COLUMN} TIMESTAMP',
                     f'{self.BATCHED_AT_COLUMN} TIMESTAMP',
-                    f'{self.DELETED_AT_COLUMN} STRING'
+                    f'{self.DELETED_AT_COLUMN} TIMESTAMP'
                     ]
 
         sql = f"""CREATE OR REPLACE TABLE {target_schema}.{target_table} (
@@ -102,46 +102,23 @@ class FastSyncTargetSnowflake:
 
         self.query(sql)
 
-    def copy_to_table(self, file_name, target_schema, table_name, is_temporary, skip_csv_header=False):
-        utils.log("SNOWFLAKE - Loading {} into Snowflake...".format(s3_key))
+    def copy_to_table(self, file_name, target_schema, table_name, is_temporary):
+        utils.log("BIGQUERY - Loading {} into Bigquery...".format(file_name))
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
 
-        aws_access_key_id = self.connection_config['aws_access_key_id']
-        aws_secret_access_key = self.connection_config['aws_secret_access_key']
-        bucket = self.connection_config['s3_bucket']
-
-        master_key = self.connection_config.get('client_side_encryption_master_key', '')
-        if master_key != '':
-            sql = """COPY INTO {}.{} FROM @{}/{}
-                FILE_FORMAT = (type='CSV' escape='\\x1e' escape_unenclosed_field='\\x1e' 
-                field_optionally_enclosed_by='\"' skip_header={} COMPRESSION='GZIP') 
-            """.format(
-                target_schema,
-                target_table,
-                self.connection_config['stage'],
-                s3_key,
-                int(skip_csv_header),
-            )
-        else:
-            sql = """COPY INTO {}.{} FROM 's3://{}/{}'
-                CREDENTIALS = (aws_key_id='{}' aws_secret_key='{}')
-                FILE_FORMAT = (type='CSV' escape='\\x1e' escape_unenclosed_field='\\x1e' 
-                field_optionally_enclosed_by='\"' skip_header={} COMPRESSION='GZIP')
-            """.format(
-                target_schema,
-                target_table,
-                bucket,
-                s3_key,
-                aws_access_key_id,
-                aws_secret_access_key,
-                int(skip_csv_header),
-            )
-
-        self.query(sql)
-
-        utils.log("SNOWFLAKE - Deleting {} from S3...".format(s3_key))
-        self.s3.delete_object(Bucket=bucket, Key=s3_key)
+        client = self.open_connection()
+        dataset_ref = client.dataset(target_schema)
+        table_ref = dataset_ref.table(target_table)
+        table_schema = client.get_table(table_ref).schema
+        job_config = bigquery.LoadJobConfig()
+        job_config.source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
+        job_config.schema = table_schema
+        job_config.write_disposition = 'WRITE_TRUNCATE'
+        with open(file_name, "rb") as source_file:
+            job = client.load_table_from_file(source_file, table_ref, job_config=job_config)
+        job.result()
+        utils.log(job.errors)
 
     # grant_... functions are common functions called by utils.py: grant_privilege function
     # "to_group" is not used here but exists for compatibility reasons with other database types
@@ -167,7 +144,7 @@ class FastSyncTargetSnowflake:
             self.query(sql)
 
     def obfuscate_columns(self, target_schema, table_name):
-        utils.log("SNOWFLAKE - Applying obfuscation rules")
+        utils.log("BIGQUERY - Applying obfuscation rules")
         table_dict = utils.tablename_to_dict(table_name)
         temp_table = table_dict.get('temp_table_name')
         transformations = self.transformation_config.get('transformations', [])
@@ -210,37 +187,23 @@ class FastSyncTargetSnowflake:
             self.query(sql)
 
     def swap_tables(self, schema, table_name):
+        project_id = self.connection_config['project_id']
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name')
         temp_table = table_dict.get('temp_table_name')
 
         # Swap tables and drop the temp tamp
-        self.query("ALTER TABLE {}.{} SWAP WITH {}.{}".format(schema, temp_table, schema, target_table))
-        self.query("DROP TABLE IF EXISTS {}.{}".format(schema, temp_table))
+        table_id = '{}.{}.{}'.format(project_id, schema, target_table)
+        temp_table_id = '{}.{}.{}'.format(project_id, schema, temp_table)
 
-    def cache_information_schema_columns(self, tables):
-        pipelinewise_schema = utils.tablename_to_dict(self.connection_config['stage'])['schema_name']
-        schemas_to_cache = utils.get_target_schemas(self.connection_config, tables)
+        # we cant swap tables in bigquery, so we copy the temp into the table
+        # then delete the temp table
+        job_config = bigquery.LoadJobConfig()
+        job_config.write_disposition = 'WRITE_TRUNCATE'
+        client = self.open_connection()
+        replace_job = client.copy_table(temp_table_id, table_id, job_config=job_config)
+        replace_job.result()
 
-        # Create an empty cache table if not exists
-        self.query("""
-            CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)
-        """.format(pipelinewise_schema))
-
-        #  Cache table columns from information_schema
-        for schema_name in schemas_to_cache:
-            utils.log("rebuilding information_schema cache for schema: {}".format(schemas_to_cache))
-
-            # Delete existing data about the current schema
-            self.query("""
-                DELETE FROM {}.columns
-                WHERE LOWER(table_schema) = '{}'
-            """.format(pipelinewise_schema, schema_name.lower()))
-
-            # Insert the latest data from information_schema into the cache table
-            self.query("""
-                INSERT INTO {}.columns
-                SELECT table_schema, table_name, column_name, data_type
-                FROM information_schema.columns
-                WHERE LOWER(table_schema) = '{}'
-            """.format(pipelinewise_schema, schema_name.lower()))
+        # delete the temp table
+        delete_job = client.delete_table(temp_table_id)
+        delete_job.result()
