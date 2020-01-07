@@ -1,0 +1,1 @@
+-e git+git://github.com/jmriego/target-bigquery#egg=target-bigquery

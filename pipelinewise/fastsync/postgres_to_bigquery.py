@@ -115,7 +115,7 @@ def sync_table(table):
         utils.grant_privilege(target_schema, grantees, bigquery.grant_usage_on_schema)
         utils.grant_privilege(target_schema, grantees, bigquery.grant_select_on_schema)
 
-    except KeyError as exc:
+    except Exception as exc:
         utils.log("CRITICAL: {}".format(exc))
         return "{}: {}".format(table, exc)
 
