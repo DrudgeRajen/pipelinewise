@@ -1,1 +1,1 @@
--e git+git://github.com/jmriego/target-bigquery#egg=target-bigquery
+-e git+git://github.com/jmriego/pipelinewise-target-bigquery#egg=target-bigquery
