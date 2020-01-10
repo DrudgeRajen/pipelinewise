@@ -87,7 +87,7 @@ class FastSyncTargetBigquery:
         target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
 
         # skip the EXTRACTED, BATCHED and DELETED columns in case they exist because they gonna be added later
-        columns = ['`{}`'.format(c) for c in columns if not (c.startswith(self.EXTRACTED_AT_COLUMN) or
+        columns = ['{}'.format(c) for c in columns if not (c.startswith(self.EXTRACTED_AT_COLUMN) or
                                               c.startswith(self.BATCHED_AT_COLUMN) or
                                               c.startswith(self.DELETED_AT_COLUMN))]
 

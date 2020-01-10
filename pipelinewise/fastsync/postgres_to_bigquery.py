@@ -83,7 +83,7 @@ def sync_table(table):
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
         postgres.copy_table(table, filepath, gz=False)
-        bigquery_types = postgres.map_column_types_to_target(table)
+        bigquery_types = postgres.map_column_types_to_target(table, quotes='`')
         bigquery_columns = bigquery_types.get("columns", [])
         postgres.close_connection()
 

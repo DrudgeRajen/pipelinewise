@@ -208,9 +208,9 @@ class FastSyncTapPostgres:
         return self.query(sql)
 
 
-    def map_column_types_to_target(self, table_name):
+    def map_column_types_to_target(self, table_name, quotes=""):
         postgres_columns = self.get_table_columns(table_name)
-        mapped_columns = ["{} {}".format(pc[0], self.tap_type_to_target_type(pc[1])) for pc in postgres_columns]
+        mapped_columns = ["{} {}".format(quotes + pc[0] + quotes, self.tap_type_to_target_type(pc[1])) for pc in postgres_columns]
 
         return {
             "columns": mapped_columns,
