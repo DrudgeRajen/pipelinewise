@@ -58,9 +58,9 @@ def tap_type_to_target_type(pg_type):
         'time without time zone':'TIME',
         'time with time zone':'TIME',
         #TODO: fix these types
-        'ARRAY':'VARIANT',  # This is all uppercase, because postgres stores it in this format in information_schema.columns.data_type
-        'json':'VARIANT',
-        'jsonb':'VARIANT'
+        'ARRAY':'STRING',  # This is all uppercase, because postgres stores it in this format in information_schema.columns.data_type
+        'json':'STRING',
+        'jsonb':'STRING'
     }.get(pg_type, 'STRING')
 
 
