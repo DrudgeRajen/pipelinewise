@@ -1,4 +1,19 @@
+FROM python:3.7.4-buster AS intermediate
+
+ARG SSH_PRIVATE_KEY
+RUN mkdir -p /root/.ssh/ \
+    && echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa \
+    && chmod 700 /root/.ssh \
+    && chmod 600 /root/.ssh/id_rsa \
+    && ssh-keyscan code.corp.indeed.com >> /root/.ssh/known_hosts
+
+COPY . /app
+
+RUN cd /app \
+    && ./install.sh --connectors=target-bigquery --acceptlicenses --nousage --notestextras
+
 FROM python:3.7.4-buster
+COPY --from=intermediate /app /app
 
 RUN apt-get -qq update && apt-get -qqy install \
         apt-utils \
@@ -9,8 +24,6 @@ RUN apt-get -qq update && apt-get -qqy install \
 # Oracle Instant Clinet for tap-oracle
 ADD https://download.oracle.com/otn_software/linux/instantclient/193000/oracle-instantclient19.3-basiclite-19.3.0.0.0-1.x86_64.rpm /app/oracle-instantclient.rpm
 RUN alien -i /app/oracle-instantclient.rpm --scripts && rm -rf /app/oracle-instantclient.rpm
-
-COPY . /app
 
 RUN cd /app \
     && ./install.sh --connectors=all --acceptlicenses --nousage --notestextras \

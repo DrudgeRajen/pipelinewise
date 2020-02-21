@@ -1,1 +1,1 @@
--e git+git://code.corp.indeed.com/idw/pipelinewise-target-bigquery#egg=target-bigquery
+git+ssh://git@code.corp.indeed.com/idw/pipelinewise-target-bigquery#egg=pipelinewise-target-bigquery
