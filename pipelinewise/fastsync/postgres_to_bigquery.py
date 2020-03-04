@@ -9,7 +9,7 @@ import multiprocessing
 from datetime import datetime, timedelta
 from .commons import utils
 from .commons.tap_postgres import FastSyncTapPostgres
-from .commons.target_bigquery import FastSyncTargetBigquery
+from .commons.target_bigquery import FastSyncTargetBigquery, GCSObjectStreamUpload
 
 
 REQUIRED_CONFIG_KEYS = {
@@ -71,7 +71,7 @@ def sync_table(table):
 
     try:
         dbname = args.tap.get("dbname")
-        filename = "pipelinewise_fastsync_{}_{}_{}.csv.gz".format(dbname, table, time.strftime("%Y%m%d-%H%M%S"))
+        filename = "pipelinewise_fastsync_{}_{}_{}.csv".format(dbname, table, time.strftime("%Y%m%d-%H%M%S"))
         filepath = os.path.join(args.export_dir, filename)
         target_schema = utils.get_target_schema(args.target, table)
 
@@ -82,7 +82,9 @@ def sync_table(table):
         bookmark = utils.get_bookmark_for_table(table, args.properties, postgres, dbname=dbname)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
-        postgres.copy_table(table, filepath, gz=False)
+        blob_name = 'fastsync/{}/{}'.format(table, filename)
+        with GCSObjectStreamUpload(bigquery_target=bigquery, blob_name=blob_name) as s:
+            postgres.copy_table(table, s)
         bigquery_types = postgres.map_column_types_to_target(table, quotes='`')
         bigquery_columns = bigquery_types.get("columns", [])
         postgres.close_connection()
@@ -92,8 +94,7 @@ def sync_table(table):
         bigquery.create_table(target_schema, table, bigquery_columns, is_temporary=True)
 
         # Load into Bigquery table
-        bigquery.copy_to_table(filepath, target_schema, table, is_temporary=True)
-        os.remove(filepath)
+        bigquery.copy_to_table(blob_name, target_schema, table, is_temporary=True)
 
         # Obfuscate columns
         bigquery.obfuscate_columns(target_schema, table)
@@ -115,7 +116,7 @@ def sync_table(table):
         utils.grant_privilege(target_schema, grantees, bigquery.grant_usage_on_schema)
         utils.grant_privilege(target_schema, grantees, bigquery.grant_select_on_schema)
 
-    except Exception as exc:
+    except KeyError as exc:
         utils.log("CRITICAL: {}".format(exc))
         return "{}: {}".format(table, exc)
 

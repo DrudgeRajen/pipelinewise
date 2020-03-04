@@ -219,7 +219,7 @@ class FastSyncTapPostgres:
         }
 
 
-    def copy_table(self, table_name, path, gz=True):
+    def copy_table(self, table_name, path):
         table_columns = self.get_table_columns(table_name)
         column_safe_sql_values = [c.get('safe_sql_value') for c in table_columns]
 
@@ -234,9 +234,8 @@ class FastSyncTapPostgres:
         FROM {}) TO STDOUT with CSV DELIMITER ','
         """.format(','.join(column_safe_sql_values), table_name)
         utils.log("POSTGRES - Exporting data: {}".format(sql))
-        if gz:
-            with gzip.open(path, 'wt') as gzfile:
-                self.curr.copy_expert(sql, gzfile, size=131072)
-        else:
+        try:
             with open(path, 'wt') as f:
                 self.curr.copy_expert(sql, f, size=131072)
+        except TypeError:
+            self.curr.copy_expert(sql, path, size=131072)
