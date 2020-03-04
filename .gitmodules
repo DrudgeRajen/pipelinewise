@@ -1,0 +1,4 @@
+[submodule "pipelinewise-target-bigquery"]
+	path = pipelinewise-target-bigquery
+	url = git@code.corp.indeed.com:idw/pipelinewise-target-bigquery.git
+	branch = master

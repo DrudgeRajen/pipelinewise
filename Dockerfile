@@ -1,19 +1,6 @@
-FROM python:3.7.4-buster AS intermediate
-
-ARG SSH_PRIVATE_KEY
-RUN mkdir -p /root/.ssh/ \
-    && echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa \
-    && chmod 700 /root/.ssh \
-    && chmod 600 /root/.ssh/id_rsa \
-    && ssh-keyscan code.corp.indeed.com >> /root/.ssh/known_hosts
+FROM python:3.7.4-buster
 
 COPY . /app
-
-RUN cd /app \
-    && ./install.sh --connectors=target-bigquery --acceptlicenses --nousage --notestextras
-
-FROM python:3.7.4-buster
-COPY --from=intermediate /app /app
 
 RUN apt-get -qq update && apt-get -qqy install \
         apt-utils \
@@ -27,6 +14,7 @@ RUN alien -i /app/oracle-instantclient.rpm --scripts && rm -rf /app/oracle-insta
 
 RUN cd /app \
     && ./install.sh --connectors=all --acceptlicenses --nousage --notestextras \
+    && ./install.sh --connectors=target-bigquery --acceptlicenses --nousage --notestextras \
     && ln -s /root/.pipelinewise /app/.pipelinewise
 
 ENTRYPOINT ["/app/entrypoint.sh"]
