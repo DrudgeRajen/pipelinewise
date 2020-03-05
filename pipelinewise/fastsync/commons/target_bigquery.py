@@ -119,6 +119,7 @@ class FastSyncTargetBigquery:
         job_config.source_format = bigquery.SourceFormat.CSV
         job_config.schema = table_schema
         job_config.write_disposition = 'WRITE_TRUNCATE'
+        job_config.allow_quoted_newlines = True
         bucket_name = self.connection_config['bucket_name']
         uri = 'gs://{}/{}'.format(bucket_name, blob_name)
         job = client.load_table_from_uri(uri, table_ref, job_config=job_config)
@@ -276,6 +277,9 @@ class GCSObjectStreamUpload(object):
             except common.InvalidResponse:
                 self._request.recover(self._transport)
         return data_len
+
+    def flush(self):
+        pass
 
     def read(self, chunk_size: int) -> bytes:
         # I'm not good with efficient no-copy buffering so if this is

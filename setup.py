@@ -53,6 +53,7 @@ setup(name='pipelinewise',
         postgres-to-snowflake=pipelinewise.fastsync.postgres_to_snowflake:main
         mysql-to-redshift=pipelinewise.fastsync.mysql_to_redshift:main
         postgres-to-redshift=pipelinewise.fastsync.postgres_to_redshift:main
+        mysql-to-bigquery=pipelinewise.fastsync.mysql_to_bigquery:main
         postgres-to-bigquery=pipelinewise.fastsync.postgres_to_bigquery:main
         s3-csv-to-snowflake=pipelinewise.fastsync.s3_csv_to_snowflake:main
     ''',

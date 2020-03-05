@@ -8,7 +8,7 @@ import multiprocessing
 
 from datetime import datetime, timedelta
 from .commons import utils
-from .commons.tap_postgres import FastSyncTapPostgres
+from .commons.tap_mysql import FastSyncTapMySql
 from .commons.target_bigquery import FastSyncTargetBigquery, GCSObjectStreamUpload
 
 
@@ -27,46 +27,42 @@ REQUIRED_CONFIG_KEYS = {
 lock = multiprocessing.Lock()
 
 
-def tap_type_to_target_type(pg_type):
-    """Data type mapping from Postgres to Bigquery"""
+def tap_type_to_target_type(mysql_type, mysql_column_type):
+    """Data type mapping from MySql to Bigquery"""
     return {
         'char':'STRING',
-        'character':'STRING',
         'varchar':'STRING',
-        'character varying':'STRING',
+        'binary':'STRING',
+        'varbinary':'STRING',
+        'blob':'STRING',
+        'tinyblob':'STRING',
+        'mediumblob':'STRING',
+        'longblob':'STRING',
+        'geometry':'STRING',
         'text':'STRING',
-        'bit': 'BOOL',
-        'varbit':'NUMERIC',
-        'bit varying':'NUMERIC',
-        'smallint':'INT64',
-        'int':'INT64',
-        'integer':'INT64',
-        'bigint':'INT64',
-        'smallserial':'INT64',
-        'serial':'INT64',
-        'bigserial':'INT64',
-        'numeric':'NUMERIC',
-        'double precision':'NUMERIC',
-        'real':'NUMERIC',
+        'tinytext':'STRING',
+        'mediumtext':'STRING',
+        'longtext':'STRING',
+        'enum':'STRING',
+        'int':'NUMERIC',
+        'tinyint':'BOOL' if mysql_column_type == 'tinyint(1)' else 'NUMERIC',
+        'smallint':'NUMERIC',
+        'bigint':'NUMERIC',
+        'bit':'BOOL',
+        'decimal':'NUMERIC',
+        'double':'NUMERIC',
+        'float':'NUMERIC',
         'bool':'BOOL',
         'boolean':'BOOL',
         'date':'TIMESTAMP',
-        'timestamp':'TIMESTAMP',
-        'timestamp without time zone':'TIMESTAMP',
-        'timestamp with time zone':'TIMESTAMP',
-        'time':'TIME',
-        'time without time zone':'TIME',
-        'time with time zone':'TIME',
-        #TODO: fix these types
-        'ARRAY':'STRING',  # This is all uppercase, because postgres stores it in this format in information_schema.columns.data_type
-        'json':'STRING',
-        'jsonb':'STRING'
-    }.get(pg_type, 'STRING')
+        'datetime':'TIMESTAMP',
+        'timestamp':'TIMESTAMP'
+    }.get(mysql_type, 'STRING')
 
 
 def sync_table(table):
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
-    postgres = FastSyncTapPostgres(args.tap, tap_type_to_target_type)
+    mysql = FastSyncTapMySql(args.tap, tap_type_to_target_type)
     bigquery = FastSyncTargetBigquery(args.target, args.transform)
 
     try:
@@ -76,18 +72,18 @@ def sync_table(table):
         target_schema = utils.get_target_schema(args.target, table)
 
         # Open connection
-        postgres.open_connection()
+        mysql.open_connections()
 
         # Get bookmark - LSN position or Incremental Key value
-        bookmark = utils.get_bookmark_for_table(table, args.properties, postgres, dbname=dbname)
+        bookmark = utils.get_bookmark_for_table(table, args.properties, mysql, dbname=dbname)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
         blob_name = 'fastsync/{}/{}'.format(table, filename)
         with GCSObjectStreamUpload(bigquery_target=bigquery, blob_name=blob_name) as s:
-            postgres.copy_table(table, s)
-        bigquery_types = postgres.map_column_types_to_target(table, quotes='`')
+            mysql.copy_table(table, s)
+        bigquery_types = mysql.map_column_types_to_target(table)
         bigquery_columns = bigquery_types.get("columns", [])
-        postgres.close_connection()
+        mysql.close_connections()
 
         # Creating temp table in Bigquery
         bigquery.create_schema(target_schema)
@@ -116,7 +112,7 @@ def sync_table(table):
         utils.grant_privilege(target_schema, grantees, bigquery.grant_usage_on_schema)
         utils.grant_privilege(target_schema, grantees, bigquery.grant_select_on_schema)
 
-    except Exception as exc:
+    except KeyError as exc:
         utils.log("CRITICAL: {}".format(exc))
         return "{}: {}".format(table, exc)
 
@@ -174,7 +170,7 @@ def main_impl():
 def main():
     try:
         main_impl()
-    except Exception as exc:
+    except KeyError as exc:
         utils.log("CRITICAL: {}".format(exc))
         raise exc
 

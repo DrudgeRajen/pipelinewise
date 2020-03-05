@@ -4,6 +4,7 @@ import csv
 import os
 import datetime
 import decimal
+from contextlib import ExitStack
 
 from pymysql import InterfaceError, OperationalError
 
@@ -194,8 +195,14 @@ class FastSyncTapMySql:
         exported_rows = 0
         with self.conn_unbuffered as cur:
             cur.execute(sql)
-            with gzip.open(path, 'wt') as gzfile:
-                writer = csv.writer(gzfile,
+            
+            with ExitStack() as stack:
+                try:
+                    f = stack.enter_context(gzip.open(path, 'wt'))
+                except TypeError:
+                    f = stack.enter_context(path)
+
+                writer = csv.writer(f,
                                     delimiter=',',
                                     quotechar='"',
                                     quoting=csv.QUOTE_MINIMAL)
