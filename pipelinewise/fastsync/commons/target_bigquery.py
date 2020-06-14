@@ -106,7 +106,7 @@ class FastSyncTargetBigquery:
 
         self.query(sql)
 
-    def copy_to_table(self, blob_name, target_schema, table_name, is_temporary):
+    def copy_to_table(self, filepath, target_schema, table_name, is_temporary):
         utils.log("BIGQUERY - Loading {} into Bigquery...".format(blob_name))
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower()
@@ -120,9 +120,7 @@ class FastSyncTargetBigquery:
         job_config.schema = table_schema
         job_config.write_disposition = 'WRITE_TRUNCATE'
         job_config.allow_quoted_newlines = True
-        bucket_name = self.connection_config['bucket_name']
-        uri = 'gs://{}/{}'.format(bucket_name, blob_name)
-        job = client.load_table_from_uri(uri, table_ref, job_config=job_config)
+        job = client.load_table_from_file(filepath, table_ref, job_config=job_config)
         job.result()
         utils.log(job.errors)
 
@@ -212,7 +210,3 @@ class FastSyncTargetBigquery:
 
         # delete the temp table
         client.delete_table(temp_table_id)
-
-    @property
-    def bucket_name(self):
-        return self.connection_config['bucket_name']
