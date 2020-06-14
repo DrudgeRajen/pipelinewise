@@ -148,8 +148,24 @@
         "aws_secret_access_key",
         "s3_bucket"
       ]
+    },
+    "db_conn_target_bigquery": {
+      "type": "object",
+      "properties": {
+        "project_id": {
+          "type": "string"
+        },
+        "dataset_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "dataset_id"
+      ]
     }
   },
+
   "type": "object",
   "properties": {
     "id": {
@@ -169,7 +185,8 @@
         "target-snowflake",
         "target-redshift",
         "target-postgres",
-        "target-s3-csv"
+        "target-s3-csv",
+        "target-bigquery"
       ]
     },
     "db_conn": {
@@ -185,6 +202,9 @@
         },
         {
           "$ref": "#/definitions/db_conn_target_s3_csv"
+        },
+        {
+          "$ref": "#/definitions/db_conn_target_bigquery"
         }
       ]
     }
