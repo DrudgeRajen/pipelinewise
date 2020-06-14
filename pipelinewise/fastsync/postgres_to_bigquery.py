@@ -29,8 +29,6 @@ REQUIRED_CONFIG_KEYS = {
 
 LOCK = multiprocessing.Lock()
 
-MAX_NUM="99999999999999999999999999999.999999999"
-
 def tap_type_to_target_type(pg_type):
     """Data type mapping from Postgres to Bigquery"""
     return {

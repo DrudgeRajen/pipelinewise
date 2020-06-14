@@ -64,7 +64,6 @@ class FastSyncTargetBigquery:
 
     def create_schema(self, schema_name):
         temp_schema = self.connection_config.get('temp_schema', schema_name)
-        schema_rows = 0
 
         for schema in set([schema_name, temp_schema]):
             schema_rows = self.query(
@@ -106,7 +105,7 @@ class FastSyncTargetBigquery:
 
         self.query(sql)
 
-    def copy_to_table(self, filepath, target_schema, table_name, is_temporary):
+    def copy_to_table(self, filepath, target_schema, table_name, size_bytes, is_temporary, skip_csv_header=False):
         utils.log("BIGQUERY - Loading {} into Bigquery...".format(blob_name))
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower()
@@ -120,8 +119,16 @@ class FastSyncTargetBigquery:
         job_config.schema = table_schema
         job_config.write_disposition = 'WRITE_TRUNCATE'
         job_config.allow_quoted_newlines = True
+        job_config.skip_leading_rows = 1 if skip_csv_header else 0
         job = client.load_table_from_file(filepath, table_ref, job_config=job_config)
         job.result()
+
+        inserts = results.output_rows
+        LOGGER.info('Loading into %s."%s": %s',
+                    target_schema,
+                    target_table.upper(),
+                    json.dumps({'inserts': inserts, 'updates': 0, 'size_bytes': size_bytes}))
+
         utils.log(job.errors)
 
     # grant_... functions are common functions called by utils.py: grant_privilege function
