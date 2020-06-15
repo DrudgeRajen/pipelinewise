@@ -9,7 +9,6 @@ from google.api_core import exceptions
 
 from google.auth.transport.requests import AuthorizedSession
 from google.resumable_media import requests, common
-from google.cloud import storage
 
 import time
 import os
@@ -55,7 +54,7 @@ class FastSyncTargetBigquery:
             queries = [query]
 
         client = self.open_connection()
-        utils.log("TARGET_BIGQUERY - Running query: {}".format(query))
+        LOGGER.info("TARGET_BIGQUERY - Running query: {}".format(query))
         query_job = client.query(';\n'.join(queries), job_config=job_config)
         query_job.result()
 
@@ -72,7 +71,7 @@ class FastSyncTargetBigquery:
             )
 
             if schema_rows.result().total_rows == 0:
-                utils.log("Schema '{}' does not exist. Creating...".format(schema))
+                LOGGER.info("Schema '{}' does not exist. Creating...".format(schema))
                 client = self.open_connection()
                 dataset = client.create_dataset(schema)
 
@@ -106,7 +105,7 @@ class FastSyncTargetBigquery:
         self.query(sql)
 
     def copy_to_table(self, filepath, target_schema, table_name, size_bytes, is_temporary, skip_csv_header=False):
-        utils.log("BIGQUERY - Loading {} into Bigquery...".format(blob_name))
+        LOGGER.info("BIGQUERY - Loading {} into Bigquery...".format(blob_name))
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower()
 
@@ -129,7 +128,7 @@ class FastSyncTargetBigquery:
                     target_table.upper(),
                     json.dumps({'inserts': inserts, 'updates': 0, 'size_bytes': size_bytes}))
 
-        utils.log(job.errors)
+        LOGGER.info(job.errors)
 
     # grant_... functions are common functions called by utils.py: grant_privilege function
     # "to_group" is not used here but exists for compatibility reasons with other database types
@@ -155,7 +154,7 @@ class FastSyncTargetBigquery:
             self.query(sql)
 
     def obfuscate_columns(self, target_schema, table_name):
-        utils.log("BIGQUERY - Applying obfuscation rules")
+        LOGGER.info("BIGQUERY - Applying obfuscation rules")
         table_dict = utils.tablename_to_dict(table_name)
         temp_table = table_dict.get('temp_table_name').lower()
         transformations = self.transformation_config.get('transformations', [])
