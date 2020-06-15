@@ -1,3 +1,8 @@
+import logging
+import time
+import json
+import os
+import re
 from typing import List
 
 from google.cloud import bigquery
@@ -10,10 +15,9 @@ from google.api_core import exceptions
 from google.auth.transport.requests import AuthorizedSession
 from google.resumable_media import requests, common
 
-import time
-import os
-
 from . import utils
+
+LOGGER = logging.getLogger(__name__)
 
 class FastSyncTargetBigquery:
     EXTRACTED_AT_COLUMN = '_sdc_extracted_at'
@@ -60,7 +64,6 @@ class FastSyncTargetBigquery:
 
         return query_job
 
-
     def create_schema(self, schema_name):
         temp_schema = self.connection_config.get('temp_schema', schema_name)
 
@@ -105,7 +108,7 @@ class FastSyncTargetBigquery:
         self.query(sql)
 
     def copy_to_table(self, filepath, target_schema, table_name, size_bytes, is_temporary, skip_csv_header=False):
-        LOGGER.info("BIGQUERY - Loading {} into Bigquery...".format(blob_name))
+        LOGGER.info("BIGQUERY - Loading {} into Bigquery...".format(filepath))
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower()
 
@@ -119,10 +122,11 @@ class FastSyncTargetBigquery:
         job_config.write_disposition = 'WRITE_TRUNCATE'
         job_config.allow_quoted_newlines = True
         job_config.skip_leading_rows = 1 if skip_csv_header else 0
-        job = client.load_table_from_file(filepath, table_ref, job_config=job_config)
+        with open(filepath, 'rb') as exported_data:
+            job = client.load_table_from_file(exported_data, table_ref, job_config=job_config)
         job.result()
 
-        inserts = results.output_rows
+        inserts = job.output_rows
         LOGGER.info('Loading into %s."%s": %s',
                     target_schema,
                     target_table.upper(),
@@ -150,7 +154,7 @@ class FastSyncTargetBigquery:
     def grant_select_on_schema(self, target_schema, role, to_group=False):
         # Grant role is not mandatory parameter, do nothing if not specified
         if role:
-            sql = "GRANT SELECT ON ALL TABLES IN SCHEMA {} TO ROLE {}".format(target_schema, role)
+            sql = "GRANT SELECT ON ALL TABLES IN SCHEMA {} TO ROLE {}".format(target_schema, safe(role))
             self.query(sql)
 
     def obfuscate_columns(self, target_schema, table_name):
@@ -193,7 +197,7 @@ class FastSyncTargetBigquery:
 
         # Generate and run UPDATE if at least one obfuscation rule found
         if len(trans_cols) > 0:
-            sql = "UPDATE {}.{} SET {}".format(target_schema, temp_table, ','.join(trans_cols))
+            sql = "UPDATE {}.{} SET {}".format(target_schema, temp_table, ','.join([c for c in trans_cols]))
             self.query(sql)
 
     def swap_tables(self, schema, table_name):

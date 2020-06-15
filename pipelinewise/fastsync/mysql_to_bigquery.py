@@ -13,6 +13,9 @@ from .commons import utils
 from .commons.tap_mysql import FastSyncTapMySql
 from .commons.target_bigquery import FastSyncTargetBigquery
 
+from .. import utils as pipelinewise_utils
+pipelinewise_utils.QUOTE_CHARACTER = '`'
+
 LOGGER = logging.getLogger(__name__)
 
 REQUIRED_CONFIG_KEYS = {
