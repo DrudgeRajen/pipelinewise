@@ -5,6 +5,7 @@ import psycopg2.extras
 import pymongo
 import pymysql
 import snowflake.connector
+from google.cloud import bigquery
 
 from pymongo.database import Database
 
@@ -55,6 +56,13 @@ def run_query_snowflake(query, account, database, warehouse, user, password):
                 result_rows = cur.fetchall()
     return result_rows
 
+
+def run_query_bigquery(query, project):
+    """Run and SQL query in a BigQuery database"""
+    client = bigquery.Client(project=project)
+    query_job = client.query(query)
+    query_job.result()
+    return query_job
 
 def run_query_redshift(query, host, port, user, password, database):
     """Redshift is compatible with postgres"""

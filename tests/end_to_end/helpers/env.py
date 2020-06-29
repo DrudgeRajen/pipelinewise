@@ -342,6 +342,11 @@ class E2EEnv:
                                       user=self._get_conn_env_var('TARGET_SNOWFLAKE', 'USER'),
                                       password=self._get_conn_env_var('TARGET_SNOWFLAKE', 'PASSWORD'))
 
+    def run_query_target_bigquery(self, query):
+        """Run and SQL query in target bigquery database"""
+        return db.run_query_bigquery(query,
+                                      project=self._get_conn_env_var('TARGET_BIGQUERY', 'PROJECT'))
+
     # -------------------------------------------------------------------------
     # Setup methods to initialise source and target databases and to make them
     # ready running the tests
