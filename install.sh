@@ -175,6 +175,7 @@ DEFAULT_CONNECTORS=(
     target-snowflake
     target-redshift
     target-postgres
+    target-bigquery
     transform-field
     tap-mongodb
 )
