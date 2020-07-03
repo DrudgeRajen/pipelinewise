@@ -63,7 +63,7 @@ def tap_type_to_target_type(mysql_type, mysql_column_type):
         'date':'TIMESTAMP',
         'datetime':'TIMESTAMP',
         'timestamp':'TIMESTAMP'
-    }.get(mysql_type, 'VARCHAR')
+    }.get(mysql_type, 'STRING')
 
 
 def sync_table(table: str, args: Namespace) -> Union[bool, str]:

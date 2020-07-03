@@ -65,7 +65,7 @@ def tap_type_to_target_type(pg_type):
         'ARRAY':'STRING',  # This is all uppercase, because postgres stores it in this format in information_schema.columns.data_type
         'json':'STRING',
         'jsonb':'STRING'
-    }.get(pg_type, 'VARCHAR')
+    }.get(pg_type, 'STRING')
 
 
 # pylint: disable=too-many-locals
