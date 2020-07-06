@@ -230,7 +230,7 @@ class FastSyncTapMySql:
                                     THEN concat('REPLACE(hex(`', column_name, '`)', ", '\n', ' ')")
                             WHEN data_type IN ('int', 'bigint', 'numeric', 'decimal')
                                     THEN {}
-                            ELSE concat('REPLACE(cast(`', column_name, '` AS char CHARACTER SET utf8)', ", '\n', ' ')")
+                            ELSE concat('REPLACE(REPLACE(cast(`', column_name, '` AS char CHARACTER SET utf8)', ", '\n', ' '), CHAR(0x00), '')")
                                 END AS safe_sql_value,
                             ordinal_position
                     FROM information_schema.columns
