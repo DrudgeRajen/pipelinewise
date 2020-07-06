@@ -16,6 +16,8 @@ from .commons.target_bigquery import FastSyncTargetBigquery
 from .. import utils as pipelinewise_utils
 pipelinewise_utils.QUOTE_CHARACTER = '`'
 
+MAX_NUM="99999999999999999999999999999.999999999"
+
 LOGGER = logging.getLogger(__name__)
 
 REQUIRED_CONFIG_KEYS = {
@@ -83,7 +85,7 @@ def sync_table(table: str, args: Namespace) -> Union[bool, str]:
         bookmark = utils.get_bookmark_for_table(table, args.properties, mysql)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
-        mysql.copy_table(table, filepath)
+        mysql.copy_table(table, filepath, max_num=MAX_NUM)
         size_bytes = os.path.getsize(filepath)
         bigquery_types = mysql.map_column_types_to_target(table)
         bigquery_columns = bigquery_types.get('columns', [])

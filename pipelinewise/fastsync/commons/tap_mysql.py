@@ -191,11 +191,22 @@ class FastSyncTapMySql:
 
         return None
 
-    def get_table_columns(self, table_name):
+    def get_table_columns(self, table_name, max_num=None):
         """
         Get MySQL table column details from information_schema
         """
         table_dict = utils.tablename_to_dict(table_name)
+
+        if max_num:
+            decimals = len(str(max_num).split('.')[1]) if '.' in max_num else 0
+            numeric_format = f"""
+              'CASE WHEN "' || column_name || '" BETWEEN -{max_num} AND {max_num} THEN round(cast("' || column_name || '" as numeric), {decimals})'
+            """
+        else:
+            numeric_format = """
+              '"' || column_name || '"'
+            """
+
         sql = """
                 SELECT column_name,
                     data_type,
@@ -217,6 +228,8 @@ class FastSyncTapMySql:
                                     THEN concat('CASE WHEN `' , column_name , '` is null THEN null WHEN `' , column_name , '` = 0 THEN 0 ELSE 1 END')
                             WHEN column_name = 'raw_data_hash'
                                     THEN concat('REPLACE(hex(`', column_name, '`)', ", '\n', ' ')")
+                            WHEN data_type IN ('int', 'bigint', 'numeric', 'decimal')
+                                    THEN {}
                             ELSE concat('REPLACE(cast(`', column_name, '` AS char CHARACTER SET utf8)', ", '\n', ' ')")
                                 END AS safe_sql_value,
                             ordinal_position
@@ -225,7 +238,7 @@ class FastSyncTapMySql:
                         AND table_name = '{}') x
                 ORDER BY
                         ordinal_position
-            """.format(table_dict.get('schema_name'), table_dict.get('table_name'))
+            """.format(numeric_format, table_dict.get('schema_name'), table_dict.get('table_name'))
         return self.query(sql)
 
     def map_column_types_to_target(self, table_name):
@@ -244,11 +257,11 @@ class FastSyncTapMySql:
         }
 
     # pylint: disable=too-many-locals
-    def copy_table(self, table_name, path):
+    def copy_table(self, table_name, path, max_num=None):
         """
         Export data from table to a zipped csv
         """
-        table_columns = self.get_table_columns(table_name)
+        table_columns = self.get_table_columns(table_name, max_num)
         column_safe_sql_values = [c.get('safe_sql_value') for c in table_columns]
 
         # If self.get_table_columns returns zero row then table not exist

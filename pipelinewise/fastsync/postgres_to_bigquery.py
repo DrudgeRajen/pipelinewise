@@ -13,8 +13,10 @@ from .commons import utils
 from .commons.tap_postgres import FastSyncTapPostgres
 from .commons.target_bigquery import FastSyncTargetBigquery
 
-from .. import utils
-utils.QUOTE_CHARACTER = '`'
+from .. import utils as pipelinewise_utils
+pipelinewise_utils.QUOTE_CHARACTER = '`'
+
+MAX_NUM="99999999999999999999999999999.999999999"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +89,7 @@ def sync_table(table: str, args: Namespace) -> Union[bool, str]:
         bookmark = utils.get_bookmark_for_table(table, args.properties, postgres, dbname=dbname)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
-        postgres.copy_table(table, filepath)
+        postgres.copy_table(table, filepath, max_num=MAX_NUM)
         size_bytes = os.path.getsize(filepath)
         bigquery_types = postgres.map_column_types_to_target(table)
         bigquery_columns = bigquery_types.get('columns', [])
