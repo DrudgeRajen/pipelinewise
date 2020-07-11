@@ -85,7 +85,7 @@ def sync_table(table: str, args: Namespace) -> Union[bool, str]:
         bookmark = utils.get_bookmark_for_table(table, args.properties, mysql)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
-        mysql.copy_table(table, filepath, max_num=MAX_NUM)
+        mysql.copy_table(table, filepath, max_num=MAX_NUM, date_type='datetime')
         size_bytes = os.path.getsize(filepath)
         bigquery_types = mysql.map_column_types_to_target(table)
         bigquery_columns = bigquery_types.get('columns', [])

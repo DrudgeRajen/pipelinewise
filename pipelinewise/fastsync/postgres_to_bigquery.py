@@ -89,7 +89,7 @@ def sync_table(table: str, args: Namespace) -> Union[bool, str]:
         bookmark = utils.get_bookmark_for_table(table, args.properties, postgres, dbname=dbname)
 
         # Exporting table data, get table definitions and close connection to avoid timeouts
-        postgres.copy_table(table, filepath, max_num=MAX_NUM)
+        postgres.copy_table(table, filepath, max_num=MAX_NUM, date_type='timestamp')
         size_bytes = os.path.getsize(filepath)
         bigquery_types = postgres.map_column_types_to_target(table)
         bigquery_columns = bigquery_types.get('columns', [])

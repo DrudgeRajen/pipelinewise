@@ -257,21 +257,26 @@ class FastSyncTapPostgres:
 
         return None
 
-    def get_table_columns(self, table_name, max_num=None):
+    def get_table_columns(self, table_name, max_num=None, date_type='date'):
         """
         Get MySQL table column details from information_schema
         """
         table_dict = utils.tablename_to_dict(table_name)
 
         if max_num:
-            decimals = len(str(max_num).split('.')[1]) if '.' in max_num else 0
-            numeric_format = f"""
-              'CASE WHEN "' || column_name || '" BETWEEN -{max_num} AND {max_num} THEN round(cast("' || column_name || '" as numeric), {decimals})'
+            decimals = len(max_num.split('.')[1]) if '.' in max_num else 0
+            max_int = int(max_num.split('.')[0])
+            decimal_format = f"""
+              'GREATEST(LEAST({max_num}, ROUND("' || column_name || '", {decimals})), -{max_num})'
+            """
+            integer_format = f"""
+              'GREATEST(LEAST({max_num}, "' || column_name || '"), -{max_num})'
             """
         else:
-            numeric_format = """
+            decimal_format = """
               '"' || column_name || '"'
             """
+            integer_format = decimal_format
 
         sql = """
                 SELECT
@@ -283,9 +288,11 @@ class FastSyncTapPostgres:
                 data_type,
                 CASE
                     WHEN data_type = 'ARRAY' THEN 'array_to_json("' || column_name || '") AS ' || column_name
+                    WHEN data_type = 'date' THEN column_name || '::{} AS ' || column_name
                     WHEN udt_name = 'time' THEN 'replace("' || column_name || E'"::varchar,\\\'24:00:00\\\',\\\'00:00:00\\\') AS ' || column_name
                     WHEN udt_name = 'timetz' THEN 'replace(("' || column_name || E'" at time zone \'\'UTC\'\')::time::varchar,\\\'24:00:00\\\',\\\'00:00:00\\\') AS ' || column_name
-                    WHEN data_type IN ('double precision', 'numeric', 'decimal') THEN {}
+                    WHEN data_type IN ('double precision', 'numeric', 'decimal', 'real') THEN '{} AS ' || column_name
+                    WHEN data_type IN ('smallint', 'integer', 'bigint', 'serial', 'bigserial') THEN '{} AS ' || column_name
                     ELSE '"'||column_name||'"'
                 END AS safe_sql_value
                 FROM information_schema.columns
@@ -293,7 +300,7 @@ class FastSyncTapPostgres:
                     AND table_name = '{}'
                 ORDER BY ordinal_position
                 ) AS x
-            """.format(numeric_format, table_dict.get('schema_name'), table_dict.get('table_name'))
+            """.format(date_type, decimal_format, integer_format, table_dict.get('schema_name'), table_dict.get('table_name'))
         return self.query(sql)
 
     def map_column_types_to_target(self, table_name):
@@ -309,11 +316,11 @@ class FastSyncTapPostgres:
             'primary_key': self.get_primary_keys(table_name)
         }
 
-    def copy_table(self, table_name, path, max_num):
+    def copy_table(self, table_name, path, max_num, date_type='date'):
         """
         Export data from table to a zipped csv
         """
-        table_columns = self.get_table_columns(table_name, max_num=None)
+        table_columns = self.get_table_columns(table_name, max_num=None, date_type)
         column_safe_sql_values = [c.get('safe_sql_value') for c in table_columns]
 
         # If self.get_table_columns returns zero row then table not exist

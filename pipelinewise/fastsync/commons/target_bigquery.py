@@ -124,7 +124,12 @@ class FastSyncTargetBigquery:
         job_config.skip_leading_rows = 1 if skip_csv_header else 0
         with open(filepath, 'rb') as exported_data:
             job = client.load_table_from_file(exported_data, table_ref, job_config=job_config)
-        job.result()
+        try:
+            job.result()
+        except exceptions.BadRequest as e:
+            for error_row in job.errors:
+                LOGGER.critical('ERROR: {}'.format(error_row['message']))
+            raise e
 
         inserts = job.output_rows
         LOGGER.info('Loading into %s."%s": %s',

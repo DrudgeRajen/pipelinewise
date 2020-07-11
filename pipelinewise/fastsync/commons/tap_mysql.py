@@ -191,21 +191,26 @@ class FastSyncTapMySql:
 
         return None
 
-    def get_table_columns(self, table_name, max_num=None):
+    def get_table_columns(self, table_name, max_num=None, date_type='date'):
         """
         Get MySQL table column details from information_schema
         """
         table_dict = utils.tablename_to_dict(table_name)
 
         if max_num:
-            decimals = len(str(max_num).split('.')[1]) if '.' in max_num else 0
-            numeric_format = f"""
-              'CASE WHEN "' || column_name || '" BETWEEN -{max_num} AND {max_num} THEN round(cast("' || column_name || '" as numeric), {decimals})'
+            decimals = len(max_num.split('.')[1]) if '.' in max_num else 0
+            max_int = int(max_num.split('.')[0])
+            decimal_format = f"""
+              CONCAT('GREATEST(LEAST({max_num}, ROUND(`', column_name, '`, {decimals})), -{max_num})')
+            """
+            integer_format = f"""
+              CONCAT('GREATEST(LEAST({max_int}, `', column_name, '`), -{max_int})')
             """
         else:
-            numeric_format = """
-              '"' || column_name || '"'
+            decimal_format = """
+              CONCAT('`', column_name, '`')
             """
+            integer_format = decimal_format
 
         sql = """
                 SELECT column_name,
@@ -222,13 +227,17 @@ class FastSyncTapMySql:
                                     THEN concat('REPLACE(hex(trim(trailing CHAR(0x00) from `',COLUMN_NAME,'`))', ", '\n', ' ')")
                             WHEN data_type IN ('bit')
                                     THEN concat('cast(`', column_name, '` AS unsigned)')
-                            WHEN data_type IN ('datetime', 'timestamp', 'date')
+                            WHEN data_type IN ('date')
+                                    THEN concat('nullif(CAST(`', column_name, '` AS {}),STR_TO_DATE("0000-00-00 00:00:00", "%Y-%m-%d %T"))')
+                            WHEN data_type IN ('datetime', 'timestamp')
                                     THEN concat('nullif(`', column_name, '`,STR_TO_DATE("0000-00-00 00:00:00", "%Y-%m-%d %T"))')
                             WHEN column_type IN ('tinyint(1)')
                                     THEN concat('CASE WHEN `' , column_name , '` is null THEN null WHEN `' , column_name , '` = 0 THEN 0 ELSE 1 END')
                             WHEN column_name = 'raw_data_hash'
                                     THEN concat('REPLACE(hex(`', column_name, '`)', ", '\n', ' ')")
-                            WHEN data_type IN ('int', 'bigint', 'numeric', 'decimal')
+                            WHEN data_type IN ('double', 'numeric', 'float', 'decimal', 'real')
+                                    THEN {}
+                            WHEN data_type IN ('smallint', 'integer', 'bigint', 'mediumint', 'int')
                                     THEN {}
                             ELSE concat('REPLACE(REPLACE(cast(`', column_name, '` AS char CHARACTER SET utf8)', ", '\n', ' '), CHAR(0x00), '')")
                                 END AS safe_sql_value,
@@ -238,7 +247,7 @@ class FastSyncTapMySql:
                         AND table_name = '{}') x
                 ORDER BY
                         ordinal_position
-            """.format(numeric_format, table_dict.get('schema_name'), table_dict.get('table_name'))
+            """.format(date_type, decimal_format, integer_format, table_dict.get('schema_name'), table_dict.get('table_name'))
         return self.query(sql)
 
     def map_column_types_to_target(self, table_name):
@@ -257,11 +266,11 @@ class FastSyncTapMySql:
         }
 
     # pylint: disable=too-many-locals
-    def copy_table(self, table_name, path, max_num=None):
+    def copy_table(self, table_name, path, max_num=None, date_type='date'):
         """
         Export data from table to a zipped csv
         """
-        table_columns = self.get_table_columns(table_name, max_num)
+        table_columns = self.get_table_columns(table_name, max_num, date_type)
         column_safe_sql_values = [c.get('safe_sql_value') for c in table_columns]
 
         # If self.get_table_columns returns zero row then table not exist
