@@ -102,7 +102,7 @@ class FastSyncTargetBigquery:
                     ]
 
         sql = f'CREATE OR REPLACE TABLE {target_schema}.`{target_table}` (' \
-              f'{",".join(columns)}'
+              f'{",".join(columns)})'
 
         self.query(sql)
 
@@ -130,6 +130,8 @@ class FastSyncTargetBigquery:
                 LOGGER.critical('ERROR: {}'.format(error_row['message']))
             raise e
 
+        LOGGER.info('Job {}'.format(job))
+        LOGGER.info('Job.output_rows {}'.format(job.output_rows))
         inserts = job.output_rows
         LOGGER.info('Loading into %s."%s": %s',
                     target_schema,
@@ -146,7 +148,7 @@ class FastSyncTargetBigquery:
         if role:
             table_dict = utils.tablename_to_dict(table_name)
             target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
-            sql = "GRANT SELECT ON {}.{} TO ROLE {}".format(target_schema, target_table, role)
+            sql = "GRANT SELECT ON {}.`{}` TO ROLE {}".format(target_schema, target_table, role)
             self.query(sql)
 
     def grant_usage_on_schema(self, target_schema, role, to_group=False):
@@ -158,7 +160,7 @@ class FastSyncTargetBigquery:
     def grant_select_on_schema(self, target_schema, role, to_group=False):
         # Grant role is not mandatory parameter, do nothing if not specified
         if role:
-            sql = "GRANT SELECT ON ALL TABLES IN SCHEMA {} TO ROLE {}".format(target_schema, safe(role))
+            sql = "GRANT SELECT ON ALL TABLES IN SCHEMA {} TO ROLE {}".format(target_schema, role)
             self.query(sql)
 
     def obfuscate_columns(self, target_schema, table_name):
@@ -211,8 +213,8 @@ class FastSyncTargetBigquery:
         temp_table = table_dict.get('temp_table_name').lower()
 
         # Swap tables and drop the temp tamp
-        table_id = '{}.{}.{}'.format(project_id, schema, target_table)
-        temp_table_id = '{}.{}.{}'.format(project_id, schema, temp_table)
+        table_id = '{}.{}.`{}`'.format(project_id, schema, target_table)
+        temp_table_id = '{}.{}.`{}`'.format(project_id, schema, temp_table)
 
         # we cant swap tables in bigquery, so we copy the temp into the table
         # then delete the temp table
