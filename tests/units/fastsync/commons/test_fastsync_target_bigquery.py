@@ -1,57 +1,26 @@
+import pytest
+from unittest.mock import Mock, patch, ANY
 from pipelinewise.fastsync.commons.target_bigquery import FastSyncTargetBigquery
 
-class BigqueryResultsMock(list):
-    def __init__(self):
-        self.total_rows = 0
-
-class BigqueryJobMock():
-    def result(self):
-        return BigqueryResultsMock()
-
-class BigqueryClientMock():
+@pytest.fixture
+def query_result():
     """
-    Mocked Bigquery Client class
+    Mocked Bigquery Run Query Results
     """
-    def __init__(self):
-        self.commands = []
+    qr = Mock()
+    qr.return_value = 1
+    qr.total_rows = 0
+    return qr
 
-    def create_dataset(self, dataset):
-        """Create new dataset mock function"""
-        self.commands.append(
-            {"command": "create_dataset",
-             "dataset": dataset}
-        )
-        return BigqueryJobMock()
-
-    def load_table_from_file(self, file_obj, destination, job_config):
-        """Load table from file mock function"""
-        self.commands.append(
-            {"command": "load_table_from_file",
-             "file_obj": file_obj,
-             "destination": destination,
-             "job_config": job_config}
-        )
-        return BigqueryJobMock()
-
-    def copy_table(self, sources, destination, job_config):
-        """copy table from mock function"""
-        self.commands.append(
-            {"command": "copy_table",
-             "sources": sources,
-             "destination": destination,
-             "job_config": job_config}
-        )
-        return BigqueryJobMock()
-
-    def delete_table(self, table):
-        """delete table mock function"""
-        self.commands.append(
-            {"command": "delete_table",
-             "table": table}
-        )
-
-    def query(self, query):
-        return BigqueryJobMock()
+@pytest.fixture
+def query_job(query_result):
+    """
+    Mocked Bigquery Job Query
+    """
+    qj = Mock()
+    qj.job_id = 1
+    qj.result().total_rows = 0
+    return qj
 
 class FastSyncTargetBigqueryMock(FastSyncTargetBigquery):
     """
@@ -61,23 +30,6 @@ class FastSyncTargetBigqueryMock(FastSyncTargetBigquery):
         super().__init__(connection_config, transformation_config)
 
         self.executed_queries = []
-        self.client = BigqueryClientMock()
-
-    def open_connection(self):
-        return self.client
-
-    def query(self, query, params=None):
-        """Mock running of a query"""
-        queries = []
-        if type(query) is list:
-            queries.extend(query)
-        else:
-            queries = [query]
-        self.executed_queries += queries
-        client = self.open_connection()
-        query_job = client.query(';\n'.join(queries))
-        return query_job
-
 
 # pylint: disable=attribute-defined-outside-init
 class TestFastSyncTargetBigquery:
@@ -87,44 +39,62 @@ class TestFastSyncTargetBigquery:
     def setup_method(self):
         """Initialise test FastSyncTargetPostgres object"""
         self.bigquery = FastSyncTargetBigqueryMock(connection_config={'project_id': 'dummy-project'},
-                                                     transformation_config={})
+                                                   transformation_config={})
 
-    def test_create_schema(self):
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery.Client")
+    def test_create_schema(self, Client, query_job):
         """Validate if create schema queries generated correctly"""
+        Client().query.return_value = query_job
         self.bigquery.create_schema('new_schema')
-        assert self.bigquery.client.commands == [{"command": "create_dataset", "dataset": "new_schema"}]
+        Client().create_dataset.assert_called_with('new_schema')
 
-
-    def test_drop_table(self):
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery.Client")
+    def test_drop_table(self, Client, query_job):
         """Validate if drop table queries generated correctly"""
-        self.bigquery.drop_table('test_schema', 'test_table')
-        self.bigquery.drop_table('test_schema', 'test_table', is_temporary=True)
-        self.bigquery.drop_table('test_schema', 'UPPERCASE_TABLE')
-        self.bigquery.drop_table('test_schema', 'UPPERCASE_TABLE', is_temporary=True)
-        self.bigquery.drop_table('test_schema', 'test table with space')
-        self.bigquery.drop_table('test_schema', 'test table with space', is_temporary=True)
-        assert self.bigquery.executed_queries == [
-            'DROP TABLE IF EXISTS test_schema.`test_table`',
-            'DROP TABLE IF EXISTS test_schema.`test_table_temp`',
-            'DROP TABLE IF EXISTS test_schema.`uppercase_table`',
-            'DROP TABLE IF EXISTS test_schema.`uppercase_table_temp`',
-            'DROP TABLE IF EXISTS test_schema.`test table with space`',
-            'DROP TABLE IF EXISTS test_schema.`test table with space_temp`']
+        Client().query.return_value = query_job
 
-    def test_create_table(self):
+        self.bigquery.drop_table('test_schema', 'test_table')
+        Client().query.assert_called_with(
+            'DROP TABLE IF EXISTS test_schema.`test_table`', job_config=ANY)
+
+        self.bigquery.drop_table('test_schema', 'test_table', is_temporary=True)
+        Client().query.assert_called_with(
+            'DROP TABLE IF EXISTS test_schema.`test_table_temp`', job_config=ANY)
+
+        self.bigquery.drop_table('test_schema', 'UPPERCASE_TABLE')
+        Client().query.assert_called_with(
+            'DROP TABLE IF EXISTS test_schema.`uppercase_table`', job_config=ANY)
+
+        self.bigquery.drop_table('test_schema', 'UPPERCASE_TABLE', is_temporary=True)
+        Client().query.assert_called_with(
+            'DROP TABLE IF EXISTS test_schema.`uppercase_table_temp`', job_config=ANY)
+
+        self.bigquery.drop_table('test_schema', 'test table with space')
+        Client().query.assert_called_with(
+            'DROP TABLE IF EXISTS test_schema.`test table with space`', job_config=ANY)
+
+        self.bigquery.drop_table('test_schema', 'test table with space', is_temporary=True)
+        Client().query.assert_called_with(
+            'DROP TABLE IF EXISTS test_schema.`test table with space_temp`', job_config=ANY)
+
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery.Client")
+    def test_create_table(self, Client, query_job):
         """Validate if create table queries generated correctly"""
+        Client().query.return_value = query_job
+
         # Create table with standard table and column names
         self.bigquery.executed_queries = []
         self.bigquery.create_table(target_schema='test_schema',
                                     table_name='test_table',
                                     columns=['`id` INTEGER',
                                              '`txt` STRING'])
-        assert self.bigquery.executed_queries == [
+        Client().query.assert_called_with(
             'CREATE OR REPLACE TABLE test_schema.`test_table` ('
             '`id` integer,`txt` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP']
+            '_sdc_deleted_at TIMESTAMP',
+            job_config=ANY)
 
         # Create table with reserved words in table and column names
         self.bigquery.executed_queries = []
@@ -133,12 +103,13 @@ class TestFastSyncTargetBigquery:
                                     columns=['`id` INTEGER',
                                              '`txt` STRING',
                                              '`select` STRING'])
-        assert self.bigquery.executed_queries == [
+        Client().query.assert_called_with(
             'CREATE OR REPLACE TABLE test_schema.`order` ('
             '`id` integer,`txt` string,`select` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP']
+            '_sdc_deleted_at TIMESTAMP',
+            job_config=ANY)
 
         # Create table with mixed lower and uppercase and space characters
         self.bigquery.executed_queries = []
@@ -146,12 +117,13 @@ class TestFastSyncTargetBigquery:
                                     table_name='TABLE with SPACE',
                                     columns=['`ID` INTEGER',
                                              '`COLUMN WITH SPACE` STRING'])
-        assert self.bigquery.executed_queries == [
+        Client().query.assert_called_with(
             'CREATE OR REPLACE TABLE test_schema.`table with space` ('
             '`id` integer,`column with space` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP']
+            '_sdc_deleted_at TIMESTAMP',
+            job_config=ANY)
 
         # Create table with no primary key
         self.bigquery.executed_queries = []
@@ -159,28 +131,31 @@ class TestFastSyncTargetBigquery:
                                     table_name='test_table_no_pk',
                                     columns=['`ID` INTEGER',
                                              '`TXT` STRING'])
-        assert self.bigquery.executed_queries == [
+        Client().query.assert_called_with(
             'CREATE OR REPLACE TABLE test_schema.`test_table_no_pk` ('
             '`id` integer,`txt` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP']
+            '_sdc_deleted_at TIMESTAMP',
+            job_config=ANY)
 
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery")
     def test_copy_to_table(self):
         """Validate if COPY command generated correctly"""
         # COPY table with standard table and column names
         self.bigquery.executed_queries = []
-        self.bigquery.copy_to_table(filepath='filename.csv.gz',
+        self.bigquery.copy_to_table(filepath='/dev/null',
                                      target_schema='test_schema',
                                      table_name='test_table',
                                      size_bytes=1000,
                                      is_temporary=False,
                                      skip_csv_header=False)
-        assert self.bigquery.executed_queries == [
-            'COPY INTO test_schema."TEST_TABLE" FROM \'@dummy_stage/s3_key\''
-            ' FILE_FORMAT = (type=CSV escape=\'\\x1e\' escape_unenclosed_field=\'\\x1e\''
-            ' field_optionally_enclosed_by=\'\"\' skip_header=0'
-            ' compression=GZIP binary_format=HEX)']
+        assert self.bigquery.commands == {
+             'command': 'load_table_from_file',
+             'filepath': '/dev/null',
+             'destination': 'destasdf',
+             'job_config': 'jobasdf'}
+
 
         # COPY table with reserved word in table and column names in temp table
         self.bigquery.executed_queries = []
@@ -210,6 +185,7 @@ class TestFastSyncTargetBigquery:
             ' field_optionally_enclosed_by=\'\"\' skip_header=0'
             ' compression=GZIP binary_format=HEX)']
 
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery")
     def test_grant_select_on_table(self):
         """Validate if GRANT command generated correctly"""
         # GRANT table with standard table and column names
@@ -239,6 +215,7 @@ class TestFastSyncTargetBigquery:
         assert self.bigquery.executed_queries == [
             'GRANT SELECT ON test_schema."TABLE WITH SPACE AND UPPERCASE" TO ROLE test_role']
 
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery")
     def test_grant_usage_on_schema(self):
         """Validate if GRANT command generated correctly"""
         self.bigquery.executed_queries = []
@@ -247,6 +224,7 @@ class TestFastSyncTargetBigquery:
         assert self.bigquery.executed_queries == [
             'GRANT USAGE ON SCHEMA test_schema TO ROLE test_role']
 
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery")
     def test_grant_select_on_schema(self):
         """Validate if GRANT command generated correctly"""
         self.bigquery.executed_queries = []
@@ -255,6 +233,7 @@ class TestFastSyncTargetBigquery:
         assert self.bigquery.executed_queries == [
             'GRANT SELECT ON ALL TABLES IN SCHEMA test_schema TO ROLE test_role']
 
+    @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery")
     def test_swap_tables(self):
         """Validate if swap table commands generated correctly"""
         # Swap tables with standard table and column names
