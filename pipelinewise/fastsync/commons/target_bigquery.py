@@ -135,7 +135,7 @@ class FastSyncTargetBigquery:
         inserts = job.output_rows
         LOGGER.info('Loading into %s."%s": %s',
                     target_schema,
-                    target_table.upper(),
+                    target_table,
                     json.dumps({'inserts': inserts, 'updates': 0, 'size_bytes': size_bytes}))
 
         LOGGER.info(job.errors)
@@ -213,8 +213,8 @@ class FastSyncTargetBigquery:
         temp_table = table_dict.get('temp_table_name').lower()
 
         # Swap tables and drop the temp tamp
-        table_id = '{}.{}.`{}`'.format(project_id, schema, target_table)
-        temp_table_id = '{}.{}.`{}`'.format(project_id, schema, temp_table)
+        table_id = '{}.{}.{}'.format(project_id, schema, target_table)
+        temp_table_id = '{}.{}.{}'.format(project_id, schema, temp_table)
 
         # we cant swap tables in bigquery, so we copy the temp into the table
         # then delete the temp table

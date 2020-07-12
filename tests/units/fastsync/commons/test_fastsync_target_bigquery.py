@@ -256,27 +256,27 @@ class TestFastSyncTargetBigquery:
                                    table_name='test_table')
         assert bigquery_job_config.write_disposition == 'WRITE_TRUNCATE'
         Client().copy_table.assert_called_with(
-            'dummy-project.test_schema.`test_table_temp`',
-            'dummy-project.test_schema.`test_table`',
+            'dummy-project.test_schema.test_table_temp',
+            'dummy-project.test_schema.test_table',
             job_config=ANY)
-        Client().delete_table.assert_called_with('dummy-project.test_schema.`test_table_temp`')
+        Client().delete_table.assert_called_with('dummy-project.test_schema.test_table_temp')
 
         # Swap tables with reserved word in table and column names in temp table
         self.bigquery.swap_tables(schema='test_schema',
                                    table_name='full')
         assert bigquery_job_config.write_disposition == 'WRITE_TRUNCATE'
         Client().copy_table.assert_called_with(
-            'dummy-project.test_schema.`full_temp`',
-            'dummy-project.test_schema.`full`',
+            'dummy-project.test_schema.full_temp',
+            'dummy-project.test_schema.full',
             job_config=ANY)
-        Client().delete_table.assert_called_with('dummy-project.test_schema.`full_temp`')
+        Client().delete_table.assert_called_with('dummy-project.test_schema.full_temp')
 
         # Swap tables with with space and uppercase in table name and s3 key
         self.bigquery.swap_tables(schema='test_schema',
                                    table_name='table with SPACE and UPPERCASE')
         assert bigquery_job_config.write_disposition == 'WRITE_TRUNCATE'
         Client().copy_table.assert_called_with(
-            'dummy-project.test_schema.`table with space and uppercase_temp`',
-            'dummy-project.test_schema.`table with space and uppercase`',
+            'dummy-project.test_schema.table with space and uppercase_temp',
+            'dummy-project.test_schema.table with space and uppercase',
             job_config=ANY)
-        Client().delete_table.assert_called_with('dummy-project.test_schema.`table with space and uppercase_temp`')
+        Client().delete_table.assert_called_with('dummy-project.test_schema.table with space and uppercase_temp')
