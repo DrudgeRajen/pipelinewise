@@ -1,18 +1,82 @@
 from pipelinewise.fastsync.commons.target_bigquery import FastSyncTargetBigquery
 
+class BigqueryResultsMock(list):
+    def __init__(self):
+        self.total_rows = 0
+
+class BigqueryJobMock():
+    def result(self):
+        return BigqueryResultsMock()
+
+class BigqueryClientMock():
+    """
+    Mocked Bigquery Client class
+    """
+    def __init__(self):
+        self.commands = []
+
+    def create_dataset(self, dataset):
+        """Create new dataset mock function"""
+        self.commands.append(
+            {"command": "create_dataset",
+             "dataset": dataset}
+        )
+        return BigqueryJobMock()
+
+    def load_table_from_file(self, file_obj, destination, job_config):
+        """Load table from file mock function"""
+        self.commands.append(
+            {"command": "load_table_from_file",
+             "file_obj": file_obj,
+             "destination": destination,
+             "job_config": job_config}
+        )
+        return BigqueryJobMock()
+
+    def copy_table(self, sources, destination, job_config):
+        """copy table from mock function"""
+        self.commands.append(
+            {"command": "copy_table",
+             "sources": sources,
+             "destination": destination,
+             "job_config": job_config}
+        )
+        return BigqueryJobMock()
+
+    def delete_table(self, table):
+        """delete table mock function"""
+        self.commands.append(
+            {"command": "delete_table",
+             "table": table}
+        )
+
+    def query(self, query):
+        return BigqueryJobMock()
 
 class FastSyncTargetBigqueryMock(FastSyncTargetBigquery):
     """
-    Mocked FastSyncTargetPostgres class
+    Mocked FastSyncTargetBigquery class
     """
     def __init__(self, connection_config, transformation_config=None):
         super().__init__(connection_config, transformation_config)
 
         self.executed_queries = []
+        self.client = BigqueryClientMock()
+
+    def open_connection(self):
+        return self.client
 
     def query(self, query, params=None):
-        self.executed_queries.append(query)
-        return []
+        """Mock running of a query"""
+        queries = []
+        if type(query) is list:
+            queries.extend(query)
+        else:
+            queries = [query]
+        self.executed_queries += queries
+        client = self.open_connection()
+        query_job = client.query(';\n'.join(queries))
+        return query_job
 
 
 # pylint: disable=attribute-defined-outside-init
@@ -28,7 +92,8 @@ class TestFastSyncTargetBigquery:
     def test_create_schema(self):
         """Validate if create schema queries generated correctly"""
         self.bigquery.create_schema('new_schema')
-        assert self.bigquery.executed_queries == ['CREATE SCHEMA IF NOT EXISTS new_schema']
+        assert self.bigquery.client.commands == [{"command": "create_dataset", "dataset": "new_schema"}]
+
 
     def test_drop_table(self):
         """Validate if drop table queries generated correctly"""
@@ -39,12 +104,12 @@ class TestFastSyncTargetBigquery:
         self.bigquery.drop_table('test_schema', 'test table with space')
         self.bigquery.drop_table('test_schema', 'test table with space', is_temporary=True)
         assert self.bigquery.executed_queries == [
-            'DROP TABLE IF EXISTS test_schema."TEST_TABLE"',
-            'DROP TABLE IF EXISTS test_schema."TEST_TABLE_TEMP"',
-            'DROP TABLE IF EXISTS test_schema."UPPERCASE_TABLE"',
-            'DROP TABLE IF EXISTS test_schema."UPPERCASE_TABLE_TEMP"',
-            'DROP TABLE IF EXISTS test_schema."TEST TABLE WITH SPACE"',
-            'DROP TABLE IF EXISTS test_schema."TEST TABLE WITH SPACE_TEMP"']
+            'DROP TABLE IF EXISTS test_schema.`test_table`',
+            'DROP TABLE IF EXISTS test_schema.`test_table_temp`',
+            'DROP TABLE IF EXISTS test_schema.`uppercase_table`',
+            'DROP TABLE IF EXISTS test_schema.`uppercase_table_temp`',
+            'DROP TABLE IF EXISTS test_schema.`test table with space`',
+            'DROP TABLE IF EXISTS test_schema.`test table with space_temp`']
 
     def test_create_table(self):
         """Validate if create table queries generated correctly"""
@@ -52,83 +117,60 @@ class TestFastSyncTargetBigquery:
         self.bigquery.executed_queries = []
         self.bigquery.create_table(target_schema='test_schema',
                                     table_name='test_table',
-                                    columns=['"ID" INTEGER',
-                                             '"TXT" VARCHAR'],
-                                    primary_key=['"ID"'])
+                                    columns=['`id` INTEGER',
+                                             '`txt` STRING'])
         assert self.bigquery.executed_queries == [
-            'CREATE OR REPLACE TABLE test_schema."TEST_TABLE" ('
-            '"ID" INTEGER,"TXT" VARCHAR,'
-            '_SDC_EXTRACTED_AT TIMESTAMP_NTZ,'
-            '_SDC_BATCHED_AT TIMESTAMP_NTZ,'
-            '_SDC_DELETED_AT VARCHAR'
-            ', PRIMARY KEY ("ID"))']
+            'CREATE OR REPLACE TABLE test_schema.`test_table` ('
+            '`id` integer,`txt` string,'
+            '_sdc_extracted_at TIMESTAMP,'
+            '_sdc_batched_at TIMESTAMP,'
+            '_sdc_deleted_at TIMESTAMP']
 
         # Create table with reserved words in table and column names
         self.bigquery.executed_queries = []
         self.bigquery.create_table(target_schema='test_schema',
                                     table_name='order',
-                                    columns=['"ID" INTEGER',
-                                             '"TXT" VARCHAR',
-                                             '"SELECT" VARCHAR'],
-                                    primary_key=['"ID"'])
+                                    columns=['`id` INTEGER',
+                                             '`txt` STRING',
+                                             '`select` STRING'])
         assert self.bigquery.executed_queries == [
-            'CREATE OR REPLACE TABLE test_schema."ORDER" ('
-            '"ID" INTEGER,"TXT" VARCHAR,"SELECT" VARCHAR,'
-            '_SDC_EXTRACTED_AT TIMESTAMP_NTZ,'
-            '_SDC_BATCHED_AT TIMESTAMP_NTZ,'
-            '_SDC_DELETED_AT VARCHAR'
-            ', PRIMARY KEY ("ID"))']
+            'CREATE OR REPLACE TABLE test_schema.`order` ('
+            '`id` integer,`txt` string,`select` string,'
+            '_sdc_extracted_at TIMESTAMP,'
+            '_sdc_batched_at TIMESTAMP,'
+            '_sdc_deleted_at TIMESTAMP']
 
         # Create table with mixed lower and uppercase and space characters
         self.bigquery.executed_queries = []
         self.bigquery.create_table(target_schema='test_schema',
                                     table_name='TABLE with SPACE',
-                                    columns=['"ID" INTEGER',
-                                             '"COLUMN WITH SPACE" CHARACTER VARYING'],
-                                    primary_key=['"ID"'])
+                                    columns=['`ID` INTEGER',
+                                             '`COLUMN WITH SPACE` STRING'])
         assert self.bigquery.executed_queries == [
-            'CREATE OR REPLACE TABLE test_schema."TABLE WITH SPACE" ('
-            '"ID" INTEGER,"COLUMN WITH SPACE" CHARACTER VARYING,'
-            '_SDC_EXTRACTED_AT TIMESTAMP_NTZ,'
-            '_SDC_BATCHED_AT TIMESTAMP_NTZ,'
-            '_SDC_DELETED_AT VARCHAR'
-            ', PRIMARY KEY ("ID"))']
-
-        # Create table with composite primary key
-        self.bigquery.executed_queries = []
-        self.bigquery.create_table(target_schema='test_schema',
-                                    table_name='TABLE with SPACE',
-                                    columns=['"ID" INTEGER',
-                                             '"NUM" INTEGER',
-                                             '"COLUMN WITH SPACE" CHARACTER VARYING'],
-                                    primary_key=['"ID", "NUM"'])
-        assert self.bigquery.executed_queries == [
-            'CREATE OR REPLACE TABLE test_schema."TABLE WITH SPACE" ('
-            '"ID" INTEGER,"NUM" INTEGER,"COLUMN WITH SPACE" CHARACTER VARYING,'
-            '_SDC_EXTRACTED_AT TIMESTAMP_NTZ,'
-            '_SDC_BATCHED_AT TIMESTAMP_NTZ,'
-            '_SDC_DELETED_AT VARCHAR'
-            ', PRIMARY KEY ("ID", "NUM"))']
+            'CREATE OR REPLACE TABLE test_schema.`table with space` ('
+            '`id` integer,`column with space` string,'
+            '_sdc_extracted_at TIMESTAMP,'
+            '_sdc_batched_at TIMESTAMP,'
+            '_sdc_deleted_at TIMESTAMP']
 
         # Create table with no primary key
         self.bigquery.executed_queries = []
         self.bigquery.create_table(target_schema='test_schema',
                                     table_name='test_table_no_pk',
-                                    columns=['"ID" INTEGER',
-                                             '"TXT" CHARACTER VARYING'],
-                                    primary_key=None)
+                                    columns=['`ID` INTEGER',
+                                             '`TXT` STRING'])
         assert self.bigquery.executed_queries == [
-            'CREATE OR REPLACE TABLE test_schema."TEST_TABLE_NO_PK" ('
-            '"ID" INTEGER,"TXT" CHARACTER VARYING,'
-            '_SDC_EXTRACTED_AT TIMESTAMP_NTZ,'
-            '_SDC_BATCHED_AT TIMESTAMP_NTZ,'
-            '_SDC_DELETED_AT VARCHAR)']
+            'CREATE OR REPLACE TABLE test_schema.`test_table_no_pk` ('
+            '`id` integer,`txt` string,'
+            '_sdc_extracted_at TIMESTAMP,'
+            '_sdc_batched_at TIMESTAMP,'
+            '_sdc_deleted_at TIMESTAMP']
 
     def test_copy_to_table(self):
         """Validate if COPY command generated correctly"""
         # COPY table with standard table and column names
         self.bigquery.executed_queries = []
-        self.bigquery.copy_to_table(s3_key='s3_key',
+        self.bigquery.copy_to_table(filepath='filename.csv.gz',
                                      target_schema='test_schema',
                                      table_name='test_table',
                                      size_bytes=1000,

@@ -320,7 +320,7 @@ class FastSyncTapPostgres:
         """
         Export data from table to a zipped csv
         """
-        table_columns = self.get_table_columns(table_name, max_num=None, date_type)
+        table_columns = self.get_table_columns(table_name, max_num, date_type)
         column_safe_sql_values = [c.get('safe_sql_value') for c in table_columns]
 
         # If self.get_table_columns returns zero row then table not exist

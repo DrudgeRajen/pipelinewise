@@ -82,11 +82,11 @@ class FastSyncTargetBigquery:
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
 
-        sql = "DROP TABLE IF EXISTS {}.{}".format(target_schema, target_table)
+        sql = "DROP TABLE IF EXISTS {}.`{}`".format(target_schema, target_table.lower())
         self.query(sql)
 
     def create_table(self, target_schema: str, table_name: str, columns: List[str],
-                     is_temporary: bool = False, sort_columns = False):
+                     is_temporary: bool = False):
 
         table_dict = utils.tablename_to_dict(table_name)
         target_table = table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower()
@@ -101,9 +101,8 @@ class FastSyncTargetBigquery:
                     f'{self.DELETED_AT_COLUMN} TIMESTAMP'
                     ]
 
-        sql = f"""CREATE OR REPLACE TABLE {target_schema}.{target_table} (
-        {','.join(columns)})
-        """
+        sql = f'CREATE OR REPLACE TABLE {target_schema}.`{target_table}` (' \
+              f'{",".join(columns)}'
 
         self.query(sql)
 
