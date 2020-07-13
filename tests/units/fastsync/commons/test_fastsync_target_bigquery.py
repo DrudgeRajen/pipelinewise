@@ -100,7 +100,7 @@ class TestFastSyncTargetBigquery:
             '`id` integer,`txt` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP',
+            '_sdc_deleted_at TIMESTAMP)',
             job_config=ANY)
 
         # Create table with reserved words in table and column names
@@ -114,7 +114,7 @@ class TestFastSyncTargetBigquery:
             '`id` integer,`txt` string,`select` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP',
+            '_sdc_deleted_at TIMESTAMP)',
             job_config=ANY)
 
         # Create table with mixed lower and uppercase and space characters
@@ -127,7 +127,7 @@ class TestFastSyncTargetBigquery:
             '`id` integer,`column with space` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP',
+            '_sdc_deleted_at TIMESTAMP)',
             job_config=ANY)
 
         # Create table with no primary key
@@ -140,7 +140,7 @@ class TestFastSyncTargetBigquery:
             '`id` integer,`txt` string,'
             '_sdc_extracted_at TIMESTAMP,'
             '_sdc_batched_at TIMESTAMP,'
-            '_sdc_deleted_at TIMESTAMP',
+            '_sdc_deleted_at TIMESTAMP)',
             job_config=ANY)
 
     @patch("pipelinewise.fastsync.commons.target_bigquery.bigquery.LoadJobConfig")
