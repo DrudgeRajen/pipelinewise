@@ -57,6 +57,11 @@ def run_query_snowflake(query, account, database, warehouse, user, password):
     return result_rows
 
 
+def delete_dataset_bigquery(dataset, project):
+    """Run and SQL query in a BigQuery database"""
+    client = bigquery.Client(project=project)
+    client.delete_dataset(dataset, delete_contents=True, not_found_ok=True)
+
 def run_query_bigquery(query, project):
     """Run and SQL query in a BigQuery database"""
     client = bigquery.Client(project=project)
