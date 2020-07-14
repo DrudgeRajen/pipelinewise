@@ -19,6 +19,11 @@ from . import utils
 
 LOGGER = logging.getLogger(__name__)
 
+def safe_name(name):
+    pattern = '[^a-zA-Z0-9]'
+    table_name = re.sub(pattern, '_', name)
+    return table_name.lower()
+
 class FastSyncTargetBigquery:
     EXTRACTED_AT_COLUMN = '_sdc_extracted_at'
     BATCHED_AT_COLUMN = '_sdc_batched_at'
@@ -67,20 +72,18 @@ class FastSyncTargetBigquery:
     def create_schema(self, schema_name):
         temp_schema = self.connection_config.get('temp_schema', schema_name)
 
+        client = self.open_connection()
         for schema in set([schema_name, temp_schema]):
-            schema_rows = self.query(
-                'SELECT LOWER(schema_name) schema_name FROM INFORMATION_SCHEMA.SCHEMATA WHERE LOWER(schema_name) = ?',
-                (schema.lower(),)
-            )
-
-            if schema_rows.result().total_rows == 0:
+            datasets = client.list_datasets()
+            dataset_ids = [d.dataset_id.lower() for d in datasets]
+            
+            if schema.lower() not in dataset_ids:
                 LOGGER.info("Schema '{}' does not exist. Creating...".format(schema))
-                client = self.open_connection()
-                dataset = client.create_dataset(schema)
+                dataset = client.create_dataset(schema, exists_ok=True)
 
     def drop_table(self, target_schema, table_name, is_temporary=False):
         table_dict = utils.tablename_to_dict(table_name)
-        target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
+        target_table = safe_name(table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name'))
 
         sql = "DROP TABLE IF EXISTS {}.`{}`".format(target_schema, target_table.lower())
         self.query(sql)
@@ -89,7 +92,7 @@ class FastSyncTargetBigquery:
                      is_temporary: bool = False):
 
         table_dict = utils.tablename_to_dict(table_name)
-        target_table = table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower()
+        target_table = safe_name(table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower())
 
         # skip the EXTRACTED, BATCHED and DELETED columns in case they exist because they gonna be added later
         columns = ['{}'.format(c.lower()) for c in columns if not (c.startswith(self.EXTRACTED_AT_COLUMN) or
@@ -109,7 +112,7 @@ class FastSyncTargetBigquery:
     def copy_to_table(self, filepath, target_schema, table_name, size_bytes, is_temporary, skip_csv_header=False):
         LOGGER.info("BIGQUERY - Loading {} into Bigquery...".format(filepath))
         table_dict = utils.tablename_to_dict(table_name)
-        target_table = table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower()
+        target_table = safe_name(table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower())
 
         client = self.open_connection()
         dataset_ref = client.dataset(target_schema)
@@ -147,7 +150,7 @@ class FastSyncTargetBigquery:
         # Grant role is not mandatory parameter, do nothing if not specified
         if role:
             table_dict = utils.tablename_to_dict(table_name)
-            target_table = table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name')
+            target_table = safe_name(table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name'))
             sql = "GRANT SELECT ON {}.`{}` TO ROLE {}".format(target_schema, target_table, role)
             self.query(sql)
 
@@ -166,7 +169,7 @@ class FastSyncTargetBigquery:
     def obfuscate_columns(self, target_schema, table_name):
         LOGGER.info("BIGQUERY - Applying obfuscation rules")
         table_dict = utils.tablename_to_dict(table_name)
-        temp_table = table_dict.get('temp_table_name').lower()
+        temp_table = safe_name(table_dict.get('temp_table_name').lower())
         transformations = self.transformation_config.get('transformations', [])
         trans_cols = []
 
@@ -209,8 +212,8 @@ class FastSyncTargetBigquery:
     def swap_tables(self, schema, table_name):
         project_id = self.connection_config['project_id']
         table_dict = utils.tablename_to_dict(table_name)
-        target_table = table_dict.get('table_name').lower()
-        temp_table = table_dict.get('temp_table_name').lower()
+        target_table = safe_name(table_dict.get('table_name').lower())
+        temp_table = safe_name(table_dict.get('temp_table_name').lower())
 
         # Swap tables and drop the temp tamp
         table_id = '{}.{}.{}'.format(project_id, schema, target_table)

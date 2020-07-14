@@ -51,13 +51,13 @@ class TestTargetBigquery:
         # Setup and clean source and target databases
         self.e2e.setup_tap_mysql()
         self.e2e.setup_tap_postgres()
-        # TODO: add s3 and mongodb
-        # if self.e2e.env['TAP_S3_CSV']['is_configured']:
-            # self.e2e.setup_tap_s3_csv()
-        # self.e2e.setup_tap_mongodb()
+        if self.e2e.env['TAP_S3_CSV']['is_configured']:
+            self.e2e.setup_tap_s3_csv()
+        self.e2e.setup_tap_mongodb()
         self.e2e.setup_target_bigquery()
 
         # Import project
+        print(f'JM pipelinewise import_config --dir {self.project_dir}')
         [return_code, stdout, stderr] = tasks.run_command(f'pipelinewise import_config --dir {self.project_dir}')
         assertions.assert_command_success(return_code, stdout, stderr)
 
