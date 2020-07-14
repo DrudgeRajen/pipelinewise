@@ -16,13 +16,18 @@ from google.auth.transport.requests import AuthorizedSession
 from google.resumable_media import requests, common
 
 from . import utils
+utils.QUOTE_CHARACTER = '`'
 
 LOGGER = logging.getLogger(__name__)
 
-def safe_name(name):
+def safe_name(name, quotes=True):
+    name = name.replace('`', '')
     pattern = '[^a-zA-Z0-9]'
-    table_name = re.sub(pattern, '_', name)
-    return table_name.lower()
+    removed_bad_chars = re.sub(pattern, '_', name).lower()
+    if quotes:
+        return '`{}`'.format(removed_bad_chars)
+    else:
+        return removed_bad_chars
 
 class FastSyncTargetBigquery:
     EXTRACTED_AT_COLUMN = '_sdc_extracted_at'
@@ -85,7 +90,7 @@ class FastSyncTargetBigquery:
         table_dict = utils.tablename_to_dict(table_name)
         target_table = safe_name(table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name'))
 
-        sql = "DROP TABLE IF EXISTS {}.`{}`".format(target_schema, target_table.lower())
+        sql = "DROP TABLE IF EXISTS {}.{}".format(target_schema, target_table.lower())
         self.query(sql)
 
     def create_table(self, target_schema: str, table_name: str, columns: List[str],
@@ -104,7 +109,7 @@ class FastSyncTargetBigquery:
                     f'{self.DELETED_AT_COLUMN} TIMESTAMP'
                     ]
 
-        sql = f'CREATE OR REPLACE TABLE {target_schema}.`{target_table}` (' \
+        sql = f'CREATE OR REPLACE TABLE {target_schema}.{target_table} (' \
               f'{",".join(columns)})'
 
         self.query(sql)
@@ -112,7 +117,8 @@ class FastSyncTargetBigquery:
     def copy_to_table(self, filepath, target_schema, table_name, size_bytes, is_temporary, skip_csv_header=False):
         LOGGER.info("BIGQUERY - Loading {} into Bigquery...".format(filepath))
         table_dict = utils.tablename_to_dict(table_name)
-        target_table = safe_name(table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower())
+        target_table = safe_name(table_dict.get('table_name' if not is_temporary else 'temp_table_name').lower(),
+                                 quotes=False)
 
         client = self.open_connection()
         dataset_ref = client.dataset(target_schema)
@@ -151,7 +157,7 @@ class FastSyncTargetBigquery:
         if role:
             table_dict = utils.tablename_to_dict(table_name)
             target_table = safe_name(table_dict.get('table_name') if not is_temporary else table_dict.get('temp_table_name'))
-            sql = "GRANT SELECT ON {}.`{}` TO ROLE {}".format(target_schema, target_table, role)
+            sql = "GRANT SELECT ON {}.{} TO ROLE {}".format(target_schema, target_table, role)
             self.query(sql)
 
     def grant_usage_on_schema(self, target_schema, role, to_group=False):
@@ -169,7 +175,7 @@ class FastSyncTargetBigquery:
     def obfuscate_columns(self, target_schema, table_name):
         LOGGER.info("BIGQUERY - Applying obfuscation rules")
         table_dict = utils.tablename_to_dict(table_name)
-        temp_table = safe_name(table_dict.get('temp_table_name').lower())
+        temp_table = safe_name(table_dict.get('temp_table_name').lower(), quotes=False)
         transformations = self.transformation_config.get('transformations', [])
         trans_cols = []
 
@@ -186,19 +192,19 @@ class FastSyncTargetBigquery:
             if t.get('tap_stream_name') == tap_stream_name_by_table_name:
                 # use safe field id in case the column to transform is has a name of a reserved word
                 # fallback to field_id if the safe id doesn't exist
-                column = t.get('safe_field_id', t.get('field_id'))
+                column = safe_name(t.get('field_id'))
                 transform_type = t.get('type')
                 if transform_type == 'SET-NULL':
                     trans_cols.append("{} = NULL".format(column))
                 elif transform_type == 'HASH':
-                    trans_cols.append("{} = SHA2({}, 256)".format(column, column))
+                    trans_cols.append("{} = TO_HEX(SHA256({}))".format(column, column))
                 elif 'HASH-SKIP-FIRST' in transform_type:
                     skip_first_n = transform_type[-1]
                     trans_cols.append(
-                        "{} = CONCAT(SUBSTRING({}, 1, {}), SHA2(SUBSTRING({}, {} + 1), 256))".format(column, column,
-                                                                                                     skip_first_n,
-                                                                                                     column,
-                                                                                                     skip_first_n))
+                        "{} = CONCAT(SUBSTRING({}, 1, {}), TO_HEX(SHA256(SUBSTRING({}, {} + 1))))".format(column, column,
+                                                                                                               skip_first_n,
+                                                                                                               column,
+                                                                                                               skip_first_n))
                 elif transform_type == 'MASK-DATE':
                     trans_cols.append("{} = TO_CHAR({}::DATE,'YYYY-01-01')::DATE".format(column, column))
                 elif transform_type == 'MASK-NUMBER':
@@ -206,16 +212,16 @@ class FastSyncTargetBigquery:
 
         # Generate and run UPDATE if at least one obfuscation rule found
         if len(trans_cols) > 0:
-            sql = "UPDATE {}.{} SET {}".format(target_schema, temp_table, ','.join([c for c in trans_cols]))
+            sql = "UPDATE {}.{} SET {} WHERE true".format(target_schema, temp_table, ','.join([c for c in trans_cols]))
             self.query(sql)
 
     def swap_tables(self, schema, table_name):
         project_id = self.connection_config['project_id']
         table_dict = utils.tablename_to_dict(table_name)
-        target_table = safe_name(table_dict.get('table_name').lower())
-        temp_table = safe_name(table_dict.get('temp_table_name').lower())
+        target_table = safe_name(table_dict.get('table_name').lower(), quotes=False)
+        temp_table = safe_name(table_dict.get('temp_table_name').lower(), quotes=False)
 
-        # Swap tables and drop the temp tamp
+        # Swap tables and drop the temp table
         table_id = '{}.{}.{}'.format(project_id, schema, target_table)
         temp_table_id = '{}.{}.{}'.format(project_id, schema, temp_table)
 
