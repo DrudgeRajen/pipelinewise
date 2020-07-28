@@ -358,7 +358,7 @@ class E2EEnv:
     def delete_dataset_target_bigquery(self, dataset):
         """Run and SQL query in target bigquery database"""
         return db.delete_dataset_bigquery(dataset,
-                                        project=self._get_conn_env_var('TARGET_BIGQUERY', 'PROJECT'))
+                                          project=self._get_conn_env_var('TARGET_BIGQUERY', 'PROJECT'))
 
     def run_query_target_bigquery(self, query):
         """Run and SQL query in target bigquery database"""

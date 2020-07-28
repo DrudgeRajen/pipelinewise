@@ -265,12 +265,11 @@ class FastSyncTapPostgres:
 
         if max_num:
             decimals = len(max_num.split('.')[1]) if '.' in max_num else 0
-            max_int = int(max_num.split('.')[0])
             decimal_format = f"""
-              'GREATEST(LEAST({max_num}, ROUND("' || column_name || '", {decimals})), -{max_num})'
+              'CASE WHEN "' || column_name || '" IS NULL THEN NULL ELSE GREATEST(LEAST({max_num}, ROUND("' || column_name || '"::numeric , {decimals})), -{max_num}) END'
             """
-            integer_format = f"""
-              'GREATEST(LEAST({max_num}, "' || column_name || '"), -{max_num})'
+            integer_format = """
+              '"' || column_name || '"'
             """
         else:
             decimal_format = """
@@ -291,8 +290,8 @@ class FastSyncTapPostgres:
                     WHEN data_type = 'date' THEN column_name || '::{} AS ' || column_name
                     WHEN udt_name = 'time' THEN 'replace("' || column_name || E'"::varchar,\\\'24:00:00\\\',\\\'00:00:00\\\') AS ' || column_name
                     WHEN udt_name = 'timetz' THEN 'replace(("' || column_name || E'" at time zone \'\'UTC\'\')::time::varchar,\\\'24:00:00\\\',\\\'00:00:00\\\') AS ' || column_name
-                    WHEN data_type IN ('double precision', 'numeric', 'decimal', 'real') THEN '{} AS ' || column_name
-                    WHEN data_type IN ('smallint', 'integer', 'bigint', 'serial', 'bigserial') THEN '{} AS ' || column_name
+                    WHEN data_type IN ('double precision', 'numeric', 'decimal', 'real') THEN {} || ' AS ' || column_name
+                    WHEN data_type IN ('smallint', 'integer', 'bigint', 'serial', 'bigserial') THEN {} || ' AS ' || column_name
                     ELSE '"'||column_name||'"'
                 END AS safe_sql_value
                 FROM information_schema.columns
@@ -316,7 +315,7 @@ class FastSyncTapPostgres:
             'primary_key': self.get_primary_keys(table_name)
         }
 
-    def copy_table(self, table_name, path, max_num, date_type='date'):
+    def copy_table(self, table_name, path, max_num=None, date_type='date'):
         """
         Export data from table to a zipped csv
         """

@@ -67,7 +67,7 @@ def run_query_bigquery(query, project):
     client = bigquery.Client(project=project)
     query_job = client.query(query)
     query_job.result()
-    return query_job
+    return [r.values() for r in query_job]
 
 def run_query_redshift(query, host, port, user, password, database):
     """Redshift is compatible with postgres"""
@@ -122,6 +122,20 @@ def sql_get_columns_snowflake(schemas: list) -> str:
     SELECT table_name, LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_name)
      FROM information_schema.columns
     WHERE table_schema IN ({sql_schemas})
+    GROUP BY table_name
+    ORDER BY table_name"""
+
+
+def sql_get_columns_bigquery(schemas: list) -> str:
+    """Generates an SQL command that gives the list of columns of every table
+    in a specific schema from a snowflake database"""
+    table_queries = ' UNION ALL '.join(f"""
+            SELECT table_name, column_name
+            FROM `{schema}`.INFORMATION_SCHEMA.COLUMNS""" for schema in schemas)
+
+    return f"""
+    SELECT table_name, STRING_AGG(column_name, ',' ORDER BY column_name)
+    FROM ({table_queries})
     GROUP BY table_name
     ORDER BY table_name"""
 
@@ -209,6 +223,27 @@ def sql_dynamic_row_count_snowflake(schemas: list) -> str:
            LISTAGG(CONCAT('SELECT ''', LOWER(table_name), ''' tbl, COUNT(*) row_count FROM ',
                           table_schema, '."', table_name, '"'),
                       ' UNION '),
+           ' ORDER BY tbl')
+      FROM table_list
+    """
+
+
+def sql_dynamic_row_count_bigquery(schemas: list) -> str:
+    """Generates an SQL statement that counts the number of rows in
+    every table in a specific schema(s) in a Snowflake database"""
+    sql_schemas = ', '.join(f"'{schema.lower()}'" for schema in schemas)
+
+    table_queries = ' UNION DISTINCT '.join(f"""
+            SELECT table_schema, table_name
+            FROM `{schema}`.INFORMATION_SCHEMA.TABLES
+            WHERE table_type = 'BASE TABLE'""" for schema in schemas)
+
+    return f"""
+    WITH table_list AS ({table_queries})
+    SELECT CONCAT(
+           STRING_AGG(CONCAT('SELECT \\'', LOWER(table_name), '\\' tbl, COUNT(*) row_count FROM ',
+                          table_schema, '.`', table_name, '`'),
+                      ' UNION DISTINCT '),
            ' ORDER BY tbl')
       FROM table_list
     """

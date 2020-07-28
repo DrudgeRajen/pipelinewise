@@ -199,12 +199,11 @@ class FastSyncTapMySql:
 
         if max_num:
             decimals = len(max_num.split('.')[1]) if '.' in max_num else 0
-            max_int = int(max_num.split('.')[0])
             decimal_format = f"""
               CONCAT('GREATEST(LEAST({max_num}, ROUND(`', column_name, '`, {decimals})), -{max_num})')
             """
             integer_format = f"""
-              CONCAT('GREATEST(LEAST({max_int}, `', column_name, '`), -{max_int})')
+              CONCAT('`', column_name, '`')
             """
         else:
             decimal_format = """
