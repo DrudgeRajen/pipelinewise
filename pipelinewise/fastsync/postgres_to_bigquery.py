@@ -42,7 +42,7 @@ def tap_type_to_target_type(pg_type):
         'varchar':'STRING',
         'character varying':'STRING',
         'text':'STRING',
-        'bit': 'BOOL',
+        'bit': 'STRING',
         'varbit':'NUMERIC',
         'bit varying':'NUMERIC',
         'smallint':'INT64',
